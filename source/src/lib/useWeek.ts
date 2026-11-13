@@ -1,0 +1,215 @@
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+
+import {
+  loadAssignments,
+  loadAvailability,
+  loadBlocks,
+  loadCoverRequests,
+  loadEmployees,
+  loadPublished,
+  loadReminders,
+  loadRequest,
+  loadSettings,
+} from '@/lib/api';
+import { useApp } from '@/lib/app-context';
+import {
+  findClashes,
+  findGaps,
+  weekMinutes,
+  weekWages,
+  type EngineAssignment,
+  type EngineContext,
+} from '@/lib/scheduling';
+import type {
+  Assignment,
+  Availability,
+  CafeSettings,
+  CoverRequest,
+  CoverageBlock,
+  Employee,
+  PublishedSchedule,
+  Reminder,
+  RequestStatus,
+  WeeklyRequest,
+} from '@/lib/types';
+
+export type WeekData = {
+  loading: boolean;
+  error: string;
+  employees: Employee[];
+  blocks: CoverageBlock[];
+  availability: Availability[];
+  request: WeeklyRequest | null;
+  statuses: RequestStatus[];
+  assignments: Assignment[];
+  published: PublishedSchedule | null;
+  coverRequests: CoverRequest[];
+  settings: CafeSettings | null;
+  reminders: Reminder[];
+  engine: EngineContext;
+  gaps: ReturnType<typeof findGaps>;
+  clashes: ReturnType<typeof findClashes>;
+  totalMinutes: number;
+  totalWages: number;
+  reload: () => Promise<void>;
+};
+
+export function useWeekData(weekStart: string): WeekData {
+  const { cafe } = useApp();
+  const cafeId = cafe?.id ?? '';
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [blocks, setBlocks] = useState<CoverageBlock[]>([]);
+  const [availability, setAvailability] = useState<Availability[]>([]);
+  const [request, setRequest] = useState<WeeklyRequest | null>(null);
+  const [statuses, setStatuses] = useState<RequestStatus[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [published, setPublished] = useState<PublishedSchedule | null>(null);
+  const [coverRequests, setCoverRequests] = useState<CoverRequest[]>([]);
+  const [settings, setSettings] = useState<CafeSettings | null>(null);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+
+  const load = useCallback(async () => {
+    if (!cafeId) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setError('');
+      const [emps, blks, avail, req, asg, pub, covers, cfg, rem] = await Promise.all([
+        loadEmployees(cafeId),
+        loadBlocks(cafeId),
+        loadAvailability(cafeId, weekStart),
+        loadRequest(cafeId, weekStart),
+        loadAssignments(cafeId, weekStart),
+        loadPublished(cafeId, weekStart),
+        loadCoverRequests(cafeId),
+        loadSettings(cafeId),
+        loadReminders(cafeId, weekStart),
+      ]);
+      setEmployees(emps);
+      setBlocks(blks);
+      setAvailability(avail);
+      setRequest(req.request);
+      setStatuses(req.statuses);
+      setAssignments(asg);
+      setPublished(pub);
+      setCoverRequests(covers);
+      setSettings(cfg);
+      setReminders(rem);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this week.');
+    } finally {
+      setLoading(false);
+    }
+  }, [cafeId, weekStart]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const engine = useMemo<EngineContext>(
+    () => ({
+      employees: employees.map((e) => ({
+        id: e.id,
+        name: e.name,
+        roles: e.roles ?? [],
+        canWorkAlone: e.can_work_alone,
+        rating: e.rating,
+        maxHours: e.max_hours,
+        active: e.active,
+        hourlyWage: Number(e.hourly_wage),
+      })),
+      availability: availability.map((a) => ({
+        employeeId: a.employee_id,
+        weekday: a.weekday,
+        kind: a.kind,
+        startMin: a.start_min,
+        endMin: a.end_min,
+      })),
+      assignments: assignments.map((a) => ({
+        id: a.id,
+        blockId: a.block_id,
+        weekday: a.weekday,
+        slot: a.slot,
+        employeeId: a.employee_id,
+        startMin: a.start_min,
+        endMin: a.end_min,
+        manual: a.manual,
+        overLimit: a.over_limit,
+      })),
+      statuses: Object.fromEntries(statuses.map((s) => [s.employee_id, s.status])),
+      requestSent: Boolean(request),
+      coverDays: new Set(
+        coverRequests.map((c) => `${c.employee_id}:${c.weekday}`),
+      ),
+      maxShiftHours: settings?.max_shift_hours ?? 8,
+    }),
+    [employees, availability, assignments, statuses, request, coverRequests, settings],
+  );
+
+  const engineBlocks = useMemo(
+    () =>
+      blocks.map((b) => ({
+        id: b.id,
+        weekday: b.weekday,
+        startMin: b.start_min,
+        endMin: b.end_min,
+        rule: b.rule,
+      })),
+    [blocks],
+  );
+
+  const gaps = useMemo(
+    () => findGaps(engineBlocks, engine.assignments, engine.employees, engine.coverDays),
+    [engineBlocks, engine],
+  );
+
+  const clashes = useMemo(
+    () => findClashes(engineBlocks, engine.assignments, engine),
+    [engineBlocks, engine],
+  );
+
+  const totalMinutes = useMemo(
+    () =>
+      engine.assignments.reduce(
+        (sum, a) => sum + (a.employeeId ? a.endMin - a.startMin : 0),
+        0,
+      ),
+    [engine.assignments],
+  );
+
+  const totalWages = useMemo(
+    () => weekWages(engine.assignments, engine.employees),
+    [engine.assignments, engine.employees],
+  );
+
+  return {
+    loading,
+    error,
+    employees,
+    blocks,
+    availability,
+    request,
+    statuses,
+    assignments,
+    published,
+    coverRequests,
+    settings,
+    reminders,
+    engine,
+    gaps,
+    clashes,
+    totalMinutes,
+    totalWages,
+    reload: load,
+  };
+}
+
+export function employeeWeekMinutes(assignments: EngineAssignment[], id: string): number {
+  return weekMinutes(assignments, id);
+}
