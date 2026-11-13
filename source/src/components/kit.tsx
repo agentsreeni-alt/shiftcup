@@ -173,18 +173,18 @@ export function Pill({
   tone?: 'neutral' | 'pine' | 'pistachio' | 'red' | 'outline';
   onPress?: () => void;
 }) {
-  const tones: Record<string, string> = {
-    neutral: 'bg-muted text-foreground',
-    pine: 'bg-primary text-primary-foreground',
-    pistachio: 'bg-accent text-accent-foreground',
-    red: 'bg-destructive text-destructive-foreground',
-    outline: 'border border-border bg-card text-foreground',
+  // Text color must go on the Text itself: React Native text does not inherit color.
+  const tones: Record<string, { box: string; text: string }> = {
+    neutral: { box: 'bg-muted', text: 'text-foreground' },
+    pine: { box: 'bg-primary', text: 'text-primary-foreground' },
+    pistachio: { box: 'bg-accent', text: 'text-accent-foreground' },
+    red: { box: 'bg-destructive', text: 'text-destructive-foreground' },
+    outline: { box: 'border border-border bg-card', text: 'text-foreground' },
   };
+  const t = tones[tone];
   const content = (
-    <View className={`rounded-full px-3 py-1 ${tones[tone]}`}>
-      <Text className={`text-xs font-semibold ${tones[tone].includes('text-') ? '' : ''}`}>
-        {label}
-      </Text>
+    <View className={`rounded-full px-3 py-1 ${t.box}`}>
+      <Text className={`text-xs font-semibold ${t.text}`}>{label}</Text>
     </View>
   );
   if (!onPress) return content;

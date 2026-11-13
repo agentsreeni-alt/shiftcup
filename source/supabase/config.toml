@@ -1,5 +1,23 @@
+# Vault secrets read by the reminder schedule. Values come from environment
+# variables at `supabase db push` time; never put the values in this file.
+[db.vault]
+project_url = "env(SHIFTCUP_PROJECT_URL)"
+cron_secret = "env(SHIFTCUP_CRON_SECRET)"
+
+[auth]
+site_url = "https://shiftcup-1dd3b.web.app"
+additional_redirect_urls = ["https://shiftcup-1dd3b.firebaseapp.com", "shiftcup://"]
+
 [auth.email]
 enable_confirmations = false
 
 [auth.phone]
 enable_confirmations = false
+
+# Called by Stripe (checks Stripe's signature) and by the database schedule
+# (checks x-cron-secret), not by signed-in users.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.send-reminders]
+verify_jwt = false

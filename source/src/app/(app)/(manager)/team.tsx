@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { AppBar, Btn, Card, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
+import { AppBar, Btn, Card, Pill, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
 import {
   addEmployee,
   currentWeekStart,
@@ -39,7 +39,7 @@ const FALLBACK_SETTINGS: CafeSettings = {
 };
 
 type ParsedDay = { weekday: number; kind: 'any' | 'none' | 'window'; start_min: number; end_min: number };
-type Parsed = { employee_id: string; employee_name: string; days: ParsedDay[]; unclear?: string };
+type Parsed = { employee_id: string | null; employee_name: string; days: ParsedDay[]; unclear?: string };
 
 export default function TeamScreen() {
   const router = useRouter();
@@ -52,6 +52,8 @@ export default function TeamScreen() {
   const [message, setMessage] = useState('');
   const [paste, setPaste] = useState('');
   const [parsed, setParsed] = useState<Parsed | null>(null);
+  // Who the pasted message belongs to. Pre-filled only when the reader found a name in it.
+  const [parsedFor, setParsedFor] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
 
   const [memberSheet, setMemberSheet] = useState<{ open: boolean; editing: Employee | null }>({
@@ -129,6 +131,7 @@ export default function TeamScreen() {
       if (error) throw new Error('The reader is not available yet. Add the OpenAI key first.');
       if (result?.error) throw new Error(String(result.error));
       setParsed(result as Parsed);
+      setParsedFor((result as Parsed).employee_id ?? null);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not read that message.');
     } finally {
@@ -137,12 +140,13 @@ export default function TeamScreen() {
   };
 
   const saveParsed = async () => {
-    if (!cafe || !parsed) return;
+    if (!cafe || !parsed || !parsedFor) return;
+    const person = data.employees.find((e) => e.id === parsedFor);
     setBusy(true);
     try {
       const rows: Availability[] = parsed.days.map((d) => ({
         cafe_id: cafe.id,
-        employee_id: parsed.employee_id,
+        employee_id: parsedFor,
         week_start: weekStart,
         weekday: d.weekday,
         kind: d.kind,
@@ -150,11 +154,12 @@ export default function TeamScreen() {
         end_min: d.kind === 'window' ? d.end_min : null,
       }));
       await saveAvailabilityRows(rows);
-      if (data.request) await markAnswered(data.request.id, parsed.employee_id);
+      if (data.request) await markAnswered(data.request.id, parsedFor);
       await data.reload();
       setParsed(null);
+      setParsedFor(null);
       setPaste('');
-      setMessage(`Saved ${parsed.employee_name}'s availability.`);
+      setMessage(`Saved ${person?.name ?? 'their'}'s availability.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not save that availability.');
     } finally {
@@ -275,8 +280,22 @@ export default function TeamScreen() {
 
         {parsed ? (
           <View className="mt-3 rounded-xl border border-border bg-muted p-3">
-            <Text className="text-sm font-semibold text-foreground">{parsed.employee_name}</Text>
-            <View className="mt-2 flex-row flex-wrap gap-1.5">
+            <Text className="text-xs font-semibold uppercase text-muted-foreground" style={{ letterSpacing: 0.6 }}>
+              {parsedFor ? 'From' : 'Who sent this?'}
+            </Text>
+            <View className="mt-1.5 flex-row flex-wrap gap-1.5">
+              {data.employees
+                .filter((e) => e.active)
+                .map((e) => (
+                  <Pill
+                    key={e.id}
+                    label={e.name}
+                    tone={parsedFor === e.id ? 'pine' : 'outline'}
+                    onPress={() => setParsedFor(e.id)}
+                  />
+                ))}
+            </View>
+            <View className="mt-3 flex-row flex-wrap gap-1.5">
               {parsed.days.map((d) => (
                 <View key={d.weekday} className="rounded-full bg-card px-2.5 py-1">
                   <Text className="text-[11px] font-semibold text-foreground">
@@ -295,9 +314,10 @@ export default function TeamScreen() {
             ) : null}
             <View className="mt-3">
               <Btn
-                label="Looks right, save it"
+                label={parsedFor ? 'Looks right, save it' : 'Pick who sent this first'}
                 size="sm"
                 loading={busy}
+                disabled={!parsedFor}
                 icon={<Check size={14} color={C.cream} />}
                 onPress={saveParsed}
               />

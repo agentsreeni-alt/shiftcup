@@ -55,6 +55,12 @@ async function sendSms(to: string, text: string): Promise<boolean> {
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
+  // Only the database schedule knows this secret (stored in Vault as 'cron_secret').
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+    return new Response('Forbidden', { status: 403 });
+  }
+
   const emailReady = Boolean(Deno.env.get('RESEND_API_KEY'));
   const smsReady = Boolean(
     Deno.env.get('TWILIO_ACCOUNT_SID') &&
