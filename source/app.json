@@ -38,11 +38,10 @@
             "deploymentTarget": "16.4"
           }
         }
-      ]
+      ],
+      "@sentry/react-native",
+      "expo-status-bar"
     ],
-    "router": {
-      "root": "src"
-    },
     "experiments": {
       "typedRoutes": true
     }

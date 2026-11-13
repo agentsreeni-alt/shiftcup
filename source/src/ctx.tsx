@@ -34,7 +34,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // iOS/Android 后台时 JS 线程挂起，autoRefreshToken 定时器停止，回前台需手动续期
     // Web 端定时器不受影响，autoRefreshToken 自动处理，无需额外触发
     const appStateSubscription = AppState.addEventListener('change', async (nextState) => {
-      if (Platform.OS !== 'web' && appState.current.match(/inactive|background/) && nextState === 'active') {
+      if (Platform.OS !== 'web' && appState.current?.match(/inactive|background/) && nextState === 'active') {
         const { error } = await supabase.auth.refreshSession();
         if (error) {
           await supabase.auth.signOut();

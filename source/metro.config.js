@@ -1,6 +1,6 @@
 const { getDefaultConfig } = require('expo/metro-config');
-const { withDevkit } = require('miaoda-expo-devkit/metro');
+const { withNativeWind } = require('nativewind/metro');
 
 const config = getDefaultConfig(__dirname);
 
-module.exports = withDevkit(config);
+module.exports = withNativeWind(config, { input: './src/global.css', inlineRem: 16 });

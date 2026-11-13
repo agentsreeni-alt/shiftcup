@@ -6,6 +6,8 @@ import { Loading } from '@/components/kit';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 
+export const unstable_settings = { initialRouteName: 'today' };
+
 export default function ManagerLayout() {
   const { profile, cafe, loading } = useApp();
   const insets = useSafeAreaInsets();
@@ -16,7 +18,6 @@ export default function ManagerLayout() {
 
   return (
     <Tabs
-      initialRouteName="today"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.pine,

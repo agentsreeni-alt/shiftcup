@@ -51,7 +51,7 @@ const RootLayout: React.FC = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SessionProvider>
         <AppProvider>
-          <StatusBar style="dark" backgroundColor={C.cream} />
+          <StatusBar style="dark" />
           <RootLayoutNav />
           <PortalHost />
         </AppProvider>

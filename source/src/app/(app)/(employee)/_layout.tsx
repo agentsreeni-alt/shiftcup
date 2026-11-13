@@ -6,6 +6,8 @@ import { Loading } from '@/components/kit';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 
+export const unstable_settings = { initialRouteName: 'shifts' };
+
 export default function EmployeeLayout() {
   const { profile, loading } = useApp();
   const insets = useSafeAreaInsets();
@@ -15,7 +17,6 @@ export default function EmployeeLayout() {
 
   return (
     <Tabs
-      initialRouteName="shifts"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.pine,
