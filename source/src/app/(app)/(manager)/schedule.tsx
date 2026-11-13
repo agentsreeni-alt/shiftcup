@@ -14,7 +14,6 @@ import { Pressable, Text, View } from 'react-native';
 
 import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Stars } from '@/components/kit';
 import {
-  currentWeekStart,
   loadAssignments,
   publishWeek,
   saveAssignments,
@@ -425,7 +424,7 @@ export default function ScheduleScreen() {
                     ? data.employees.find((e) => e.id === assignment.employee_id)
                     : null;
                   const colors = SLOT_COLORS[slot];
-                  const isOpen = !emp || !emp.active;
+                  const isOpen = !emp?.active;
                   const hasCover = data.coverRequests.some(
                     (c) => c.assignment_id === assignment?.id,
                   );

@@ -244,7 +244,7 @@ export function findGaps(
 
       let reason: Gap['reason'] | null = null;
       if (!assignment?.employeeId) reason = 'empty';
-      else if (!emp || !emp.active) reason = 'deactivated';
+      else if (!emp?.active) reason = 'deactivated';
       else if (coverDays.has(`${assignment.employeeId}:${block.weekday}`)) reason = 'cover';
       if (!reason) continue;
 
@@ -298,7 +298,7 @@ export function findClashes(
     const block = blocks.find((b) => b.id === assignment.blockId);
     if (!block) continue;
     const emp = ctx.employees.find((e) => e.id === assignment.employeeId);
-    if (!emp || !emp.active) continue;
+    if (!emp?.active) continue;
 
     const scoped: EngineContext = {
       ...ctx,

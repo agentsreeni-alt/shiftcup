@@ -16,7 +16,7 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
-import { DAY_SHORT, fmtRange, fmtTime } from '@/lib/dates';
+import { DAY_SHORT, fmtRange, } from '@/lib/dates';
 import type { CafeSettings, CoverageBlock, StoreHour } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 import { currentWeekStart } from '@/lib/api';
@@ -470,7 +470,9 @@ function BlockSheet({
         {state.editing ? (
           <Pressable
             onPress={async () => {
-              await deleteBlock(state.editing!.id);
+              const id = state.editing?.id;
+              if (!id) return;
+              await deleteBlock(id);
               await onSaved();
             }}
             className="flex-row items-center justify-center gap-1.5 py-2 active:opacity-60"

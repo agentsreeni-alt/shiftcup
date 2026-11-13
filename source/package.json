@@ -6,7 +6,12 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "phone": "EXPO_NO_TYPESCRIPT_SETUP=1 expo start --go",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ./src",
+    "web:build": "EXPO_NO_TYPESCRIPT_SETUP=1 expo export --platform web --output-dir ../web",
+    "web:deploy": "npm run web:build && cd .. && npx --yes firebase-tools@15 deploy --only hosting"
   },
   "dependencies": {
     "@expo/dom-webview": "~58.0.2",

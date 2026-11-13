@@ -83,7 +83,6 @@ export function buildRequestReminders(params: {
   dueMin: number;
   channel: Channel;
 }): ReminderDraft[] {
-  const dueDate = dateForWeekday(params.weekStart, params.dueWeekday);
   const sendAt = new Date();
   return params.employeeIds.map((employeeId) => ({
     employee_id: employeeId,

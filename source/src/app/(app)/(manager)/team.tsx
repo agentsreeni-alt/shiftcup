@@ -1,15 +1,14 @@
 import { useRouter } from 'expo-router';
 import { Check, Minus, Plus, Send, Sparkles, UserPlus } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
+import { AppBar, Btn, Card, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
 import {
   addEmployee,
   currentWeekStart,
   deactivateEmployee,
-  loadAvailability,
   markAnswered,
   nudgeEmployee,
   saveAvailabilityRows,

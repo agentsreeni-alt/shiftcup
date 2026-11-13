@@ -30,7 +30,7 @@ export function currentWeekStart(): string {
 }
 
 export function nextWeekStart(): string {
-  return toISODate(startOfWeek(new Date(new Date().getTime() + 7 * 86400000)));
+  return toISODate(startOfWeek(new Date(Date.now()+ 7 * 86400000)));
 }
 
 export async function loadProfile(userId: string): Promise<Profile | null> {
