@@ -43,6 +43,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(app)" />
       </Stack.Protected>
       <Stack.Screen name="legal" />
+      <Stack.Screen name="reset-password" />
     </Stack>
   );
 }

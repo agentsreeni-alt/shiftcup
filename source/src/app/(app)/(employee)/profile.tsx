@@ -83,7 +83,12 @@ export default function EmployeeProfileScreen() {
       <SectionTitle>Account</SectionTitle>
       <View className="gap-2">
         <Btn label="Sign out" variant="ghost" onPress={() => signOut()} />
-        <Btn label="Delete my account" variant="ghost" onPress={() => setDeleteOpen(true)} />
+        <PressScale
+          onPress={() => setDeleteOpen(true)}
+          className="mt-2 items-center py-2"
+        >
+          <Text className="text-sm font-semibold text-destructive">Delete my account</Text>
+        </PressScale>
       </View>
 
       {message ? <Text className="mt-3 text-xs text-muted-foreground">{message}</Text> : null}

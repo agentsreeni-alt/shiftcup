@@ -7,7 +7,7 @@ import { supabase } from '@/client/supabase';
 import { AppBar, Btn, Card, Pill, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
 import {
   addEmployee,
-  currentWeekStart,
+  planningWeekStart,
   deactivateEmployee,
   markAnswered,
   nudgeEmployee,
@@ -44,7 +44,7 @@ type Parsed = { employee_id: string | null; employee_name: string; days: ParsedD
 export default function TeamScreen() {
   const router = useRouter();
   const { cafe, hasAccess } = useApp();
-  const weekStart = currentWeekStart();
+  const weekStart = planningWeekStart();
   const data = useWeekData(weekStart);
   const settings = data.settings ?? FALLBACK_SETTINGS;
 

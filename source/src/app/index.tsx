@@ -70,10 +70,11 @@ export default function WelcomeScreen() {
           </Pressable>
           <Pressable
             onPress={() => router.push('/(auth)/join')}
-            className="items-center pb-2 active:opacity-60"
+            accessibilityRole="button"
+            className="mx-auto mb-2 flex-row items-center rounded-full border border-border px-4 py-2 active:opacity-60"
           >
-            <Text className="text-sm text-muted-foreground">
-              I have an invite code from my manager
+            <Text className="text-sm font-semibold text-primary">
+              Work here? Join with your invite code
             </Text>
           </Pressable>
         </Animated.View>

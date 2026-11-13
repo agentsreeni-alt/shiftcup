@@ -3,8 +3,8 @@ import { allShiftRuns, type EngineAssignment } from '@/lib/scheduling';
 import type { Channel, ReminderKind } from '@/lib/types';
 
 const ROLE_VERB: Record<string, string> = {
-  scooper: 'scoop',
-  barista: 'barista',
+  scooper: 'work as scooper',
+  barista: 'work as barista',
   solo: 'work solo',
 };
 const ROLE_NOUN: Record<string, string> = {

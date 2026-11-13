@@ -8,6 +8,9 @@ import { supabase } from '@/client/supabase';
 import { Btn } from '@/components/kit';
 import { C } from '@/lib/colors';
 
+// Reset links always open the live website, which can set the new password on any device.
+const RESET_BASE = 'https://shiftcup-1dd3b.web.app';
+
 export default function SignInScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -15,9 +18,35 @@ export default function SignInScreen() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState('');
+
+  const forgot = async () => {
+    setError('');
+    setInfo('');
+    const address = email.trim().toLowerCase();
+    if (!address.includes('@')) {
+      setError('Enter your email above first, then tap “Forgot password?”.');
+      return;
+    }
+    setBusy(true);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(address, {
+      redirectTo: `${RESET_BASE}/reset-password`,
+    });
+    setBusy(false);
+    if (resetError) {
+      setError(
+        resetError.message.toLowerCase().includes('rate')
+          ? 'Too many reset emails. Wait a few minutes and try again.'
+          : resetError.message,
+      );
+      return;
+    }
+    setInfo(`If ${address} has an account, a reset link is on its way. Check your inbox.`);
+  };
 
   const submit = async () => {
     setError('');
+    setInfo('');
     if (!email.trim() || !password) {
       setError('Enter your email and password.');
       return;
@@ -76,9 +105,16 @@ export default function SignInScreen() {
                     secureTextEntry={!show}
                     placeholder="Your password"
                     placeholderTextColor={C.muted}
+                    returnKeyType="go"
+                    onSubmitEditing={submit}
                     className="flex-1 px-4 py-3.5 text-base text-foreground"
                   />
-                  <Pressable onPress={() => setShow((s) => !s)} className="p-2">
+                  <Pressable
+                    onPress={() => setShow((s) => !s)}
+                    accessibilityRole="button"
+                    accessibilityLabel={show ? 'Hide password' : 'Show password'}
+                    className="p-2"
+                  >
                     {show ? (
                       <EyeOff size={18} color={C.muted} />
                     ) : (
@@ -87,7 +123,15 @@ export default function SignInScreen() {
                   </Pressable>
                 </View>
               </View>
+              <Pressable
+                onPress={forgot}
+                accessibilityRole="button"
+                className="self-end py-1 active:opacity-60"
+              >
+                <Text className="text-sm font-semibold text-primary">Forgot password?</Text>
+              </Pressable>
               {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+              {info ? <Text className="text-sm text-foreground">{info}</Text> : null}
             </View>
 
             <Btn label="Sign in" size="lg" loading={busy} onPress={submit} />

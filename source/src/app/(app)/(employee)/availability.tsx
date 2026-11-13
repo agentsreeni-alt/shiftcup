@@ -5,7 +5,7 @@ import { Text, View } from 'react-native';
 
 import { AppBar, Btn, Card, PressScale, Screen, TimeField } from '@/components/kit';
 import {
-  currentWeekStart,
+  planningWeekStart,
   loadMyAvailability,
   loadMyRequestStatus,
   loadMySettings,
@@ -23,7 +23,7 @@ const DEFAULT_DRAFT: Draft = { kind: 'any', start: 660, end: 1320 };
 
 export default function AvailabilityScreen() {
   const { employee, cafeName } = useApp();
-  const weekStart = currentWeekStart();
+  const weekStart = planningWeekStart();
   const [draft, setDraft] = useState<Draft[]>(Array.from({ length: 7 }, () => DEFAULT_DRAFT));
   const [settings, setSettings] = useState<CafeSettings | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export default function AvailabilityScreen() {
 
       <View className="mb-3 rounded-xl bg-card px-4 py-3">
         <Text className="text-sm font-semibold text-foreground">
-          Week of {fmtWeekLabel(weekStart)}
+          Next week · {fmtWeekLabel(weekStart)}
         </Text>
         <Text className="mt-0.5 text-xs text-muted-foreground">
           {requestId
@@ -144,7 +144,7 @@ export default function AvailabilityScreen() {
               <Card key={day}>
                 <View className="mb-2 flex-row items-center justify-between">
                   <Text className="text-sm font-bold text-foreground">
-                    {day} · {fmtDayDate(weekStart, i)}
+                    {day} · {fmtDayDate(weekStart, i).replace(/^\w{3} /, '')}
                   </Text>
                   <Text className="text-[11px] font-semibold text-muted-foreground">
                     {d.kind === 'any'

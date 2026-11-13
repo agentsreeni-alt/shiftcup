@@ -19,7 +19,7 @@ import { C } from '@/lib/colors';
 import { DAY_SHORT, fmtRange, } from '@/lib/dates';
 import type { CafeSettings, CoverageBlock, StoreHour } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
-import { currentWeekStart } from '@/lib/api';
+import { planningWeekStart } from '@/lib/api';
 import { useFocusEffect } from 'expo-router';
 
 const LEAD_OPTIONS = [
@@ -32,7 +32,7 @@ const LEAD_OPTIONS = [
 export default function SettingsScreen() {
   const router = useRouter();
   const { cafe, profile, signOut, refresh, isSample } = useApp();
-  const weekStart = currentWeekStart();
+  const weekStart = planningWeekStart();
   const data = useWeekData(weekStart);
 
   const [name, setName] = useState(cafe?.name ?? '');
@@ -381,7 +381,12 @@ export default function SettingsScreen() {
       <View className="gap-2">
         <Text className="text-xs text-muted-foreground">Signed in as {profile?.email}</Text>
         <Btn label="Sign out" variant="ghost" onPress={() => signOut()} />
-        <Btn label="Delete my account" variant="ghost" onPress={() => setDeleteOpen(true)} />
+        <PressScale
+          onPress={() => setDeleteOpen(true)}
+          className="mt-2 items-center py-2"
+        >
+          <Text className="text-sm font-semibold text-destructive">Delete my account</Text>
+        </PressScale>
       </View>
 
       {message ? <Text className="mt-3 text-xs text-muted-foreground">{message}</Text> : null}

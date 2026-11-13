@@ -142,7 +142,19 @@ export function useWeekData(weekStart: string): WeekData {
         manual: a.manual,
         overLimit: a.over_limit,
       })),
-      statuses: Object.fromEntries(statuses.map((s) => [s.employee_id, s.status])),
+      // Anyone who has sent availability counts as answered, even if they sent it
+      // before the request went out or their status row was never updated.
+      statuses: {
+        ...Object.fromEntries(statuses.map((s) => [s.employee_id, s.status])),
+        ...Object.fromEntries(
+          availability
+            .filter((a) => {
+              const st = statuses.find((s) => s.employee_id === a.employee_id)?.status;
+              return !st || st === 'waiting';
+            })
+            .map((a) => [a.employee_id, 'answered' as const]),
+        ),
+      },
       requestSent: Boolean(request),
       coverDays: new Set(
         coverRequests.map((c) => `${c.employee_id}:${c.weekday}`),

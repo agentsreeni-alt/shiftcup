@@ -30,7 +30,15 @@ export function currentWeekStart(): string {
 }
 
 export function nextWeekStart(): string {
-  return toISODate(startOfWeek(new Date(Date.now()+ 7 * 86400000)));
+  return toISODate(addDays(startOfWeek(new Date()), 7));
+}
+
+/**
+ * The week the team is planning: always next week. Availability is due during
+ * the current week and the schedule is published before next week starts.
+ */
+export function planningWeekStart(): string {
+  return nextWeekStart();
 }
 
 export async function loadProfile(userId: string): Promise<Profile | null> {
@@ -373,22 +381,45 @@ export async function sendWeeklyRequest(params: {
   const requestId = data?.id as string | undefined;
   if (!requestId) throw new Error('Could not create the weekly request');
 
-  const rows = params.employeeIds.map((employeeId) => ({
-    request_id: requestId,
-    cafe_id: params.cafeId,
-    employee_id: employeeId,
-    status: 'waiting' as const,
-  }));
+  // Keep anyone who already answered (or sent availability before the request)
+  // as answered. Only people still waiting get a status reset and a reminder.
+  const [{ data: existing, error: existingError }, { data: availRows, error: availError }] =
+    await Promise.all([
+      supabase.from('request_status').select('employee_id, status').eq('request_id', requestId),
+      supabase
+        .from('availability')
+        .select('employee_id')
+        .eq('cafe_id', params.cafeId)
+        .eq('week_start', params.weekStart),
+    ]);
+  if (existingError) throw existingError;
+  if (availError) throw availError;
+  const prior = new Map(
+    (existing ?? []).map((r) => [r.employee_id as string, r.status as string]),
+  );
+  const sentAvailability = new Set((availRows ?? []).map((r) => r.employee_id as string));
+
+  const rows = params.employeeIds.map((employeeId) => {
+    const before = prior.get(employeeId);
+    const status =
+      before && before !== 'waiting'
+        ? before
+        : sentAvailability.has(employeeId)
+          ? 'answered'
+          : 'waiting';
+    return { request_id: requestId, cafe_id: params.cafeId, employee_id: employeeId, status };
+  });
   if (rows.length > 0) {
     const { error: statusError } = await supabase
       .from('request_status')
       .upsert(rows, { onConflict: 'request_id,employee_id' });
     if (statusError) throw statusError;
   }
+  const stillWaiting = rows.filter((r) => r.status === 'waiting').map((r) => r.employee_id);
 
   const drafts = buildRequestReminders({
     weekStart: params.weekStart,
-    employeeIds: params.employeeIds,
+    employeeIds: stillWaiting,
     dueWeekday: params.settings.due_weekday,
     dueMin: params.settings.due_min,
     channel: params.settings.channel,
@@ -517,7 +548,7 @@ export async function createSampleCafe(userId: string): Promise<Cafe> {
   if (empError) throw empError;
 
   const byName = new Map((inserted ?? []).map((row) => [row.name as string, row.id as string]));
-  const weekStart = currentWeekStart();
+  const weekStart = planningWeekStart();
 
   const availRows = SAMPLE_EMPLOYEES.flatMap((e) => {
     const employeeId = byName.get(e.name);

@@ -5,14 +5,14 @@ import { Text, View } from 'react-native';
 
 import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle } from '@/components/kit';
 import {
-  currentWeekStart,
+  planningWeekStart,
   publishWeek,
   saveAssignments,
   sendWeeklyRequest,
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
-import { fmtHours, fmtMoney, fmtWeekLabel } from '@/lib/dates';
+import { DAY_SHORT, fmtHours, fmtMoney, fmtWeekLabel } from '@/lib/dates';
 import { fillOpenSlots } from '@/lib/scheduling';
 import type { Assignment, CafeSettings } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
@@ -33,7 +33,7 @@ const FALLBACK_SETTINGS: CafeSettings = {
 export default function TodayScreen() {
   const router = useRouter();
   const { cafe, cafeName, isSample, hasAccess, trialDaysLeft } = useApp();
-  const weekStart = currentWeekStart();
+  const weekStart = planningWeekStart();
   const data = useWeekData(weekStart);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -43,6 +43,20 @@ export default function TodayScreen() {
   const waiting = data.employees.filter(
     (e) => e.active && (data.engine.statuses[e.id] ?? 'waiting') === 'waiting',
   );
+  // One entry per person per day: a long shift can span several blocks.
+  const coverDays = [
+    ...new Map(
+      data.coverRequests
+        .filter((c) => c.week_start === weekStart)
+        .map((c) => [
+          `${c.employee_id}:${c.weekday}`,
+          {
+            name: data.employees.find((e) => e.id === c.employee_id)?.name ?? 'Someone',
+            weekday: c.weekday,
+          },
+        ]),
+    ).values(),
+  ];
   const filledCount = data.assignments.filter((a) => a.employee_id).length;
   const hasRequest = Boolean(data.request);
   const hasDraft = filledCount > 0;
@@ -160,7 +174,7 @@ export default function TodayScreen() {
     <Screen>
       <AppBar
         title={cafeName || 'Your café'}
-        subtitle={`Week of ${fmtWeekLabel(weekStart)}`}
+        subtitle={`Planning next week · ${fmtWeekLabel(weekStart)}`}
       />
 
       {isSample ? (
@@ -197,7 +211,7 @@ export default function TodayScreen() {
 
       <Card>
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-base font-semibold text-foreground">This week</Text>
+          <Text className="text-base font-semibold text-foreground">Next week</Text>
           <Text className="text-xs font-semibold text-muted-foreground">
             {step >= 4 ? 'Published' : `Step ${Math.min(step + 1, 4)} of 4`}
           </Text>
@@ -222,7 +236,7 @@ export default function TodayScreen() {
         </View>
         <Text className="mb-3 text-sm text-muted-foreground">
           {step === 0
-            ? 'Ask your team when they can work this week.'
+            ? 'Ask your team when they can work next week.'
             : step === 1
               ? waiting.length === 0
                 ? 'Everyone answered. Build the draft and ShiftCup fills what it can.'
@@ -244,27 +258,24 @@ export default function TodayScreen() {
         <AttentionRow
           icon={<Bell size={16} color={C.red} />}
           title="Cover requests"
-          value={data.coverRequests.length}
+          value={coverDays.length}
           detail={
-            data.coverRequests.length === 0
+            coverDays.length === 0
               ? 'Nobody has asked for cover.'
-              : data.coverRequests
-                  .map(
-                    (c) =>
-                      data.employees.find((e) => e.id === c.employee_id)?.name ?? 'Someone',
-                  )
-                  .join(', ')
+              : coverDays.map((c) => `${c.name} (${DAY_SHORT[c.weekday]})`).join(', ')
           }
           onPress={() => router.push('/(app)/(manager)/schedule')}
         />
         <AttentionRow
           icon={<Users size={16} color={C.pine} />}
-          title="Have not answered"
+          title={hasRequest ? 'Have not answered' : 'Not asked yet'}
           value={waiting.length}
           detail={
             waiting.length === 0
               ? 'Everyone has replied.'
-              : waiting.map((e) => e.name).join(', ')
+              : hasRequest
+                ? waiting.map((e) => e.name).join(', ')
+                : `Send the request to ask ${waiting.map((e) => e.name).join(', ')}.`
           }
           onPress={() => router.push('/(app)/(manager)/team')}
         />
@@ -298,7 +309,7 @@ export default function TodayScreen() {
         />
       </View>
 
-      <SectionTitle>This week at a glance</SectionTitle>
+      <SectionTitle>Next week at a glance</SectionTitle>
       <View className="flex-row gap-2">
         <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
           <CalendarCheck size={16} color={C.pine} />

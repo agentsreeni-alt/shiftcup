@@ -16,6 +16,7 @@ import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Sta
 import {
   loadAssignments,
   publishWeek,
+  resolveCoverRequest,
   saveAssignments,
   weekStartFromOffset,
 } from '@/lib/api';
@@ -47,7 +48,8 @@ function snapshotKey(list: Assignment[]): string {
 export default function ScheduleScreen() {
   const router = useRouter();
   const { cafe, hasAccess, isSample } = useApp();
-  const [offset, setOffset] = useState(0);
+  // Opens on the week being planned (next week). Arrows reach this week and beyond.
+  const [offset, setOffset] = useState(1);
   const weekStart = weekStartFromOffset(offset);
   const data = useWeekData(weekStart);
   const settings = data.settings ?? FALLBACK_SETTINGS;
@@ -258,6 +260,33 @@ export default function ScheduleScreen() {
   }, [data.assignments, data.employees, cafe?.name, weekStart]);
 
   const sheetBlock = slotSheet ? data.blocks.find((b) => b.id === slotSheet.blockId) : null;
+  const sheetAssignment = slotSheet
+    ? data.assignments.find((a) => a.block_id === slotSheet.blockId && a.slot === slotSheet.slot)
+    : undefined;
+  // Open cover requests from the person on this slot, for the whole day.
+  const sheetCovers = sheetAssignment?.employee_id
+    ? data.coverRequests.filter(
+        (c) =>
+          c.employee_id === sheetAssignment.employee_id &&
+          c.weekday === sheetAssignment.weekday &&
+          c.week_start === weekStart,
+      )
+    : [];
+  const sheetCoverName = data.employees.find((e) => e.id === sheetAssignment?.employee_id)?.name;
+
+  const keepOnShift = async () => {
+    setBusy(true);
+    try {
+      for (const c of sheetCovers) await resolveCoverRequest(c.id);
+      setSlotSheet(null);
+      await data.reload();
+      setMessage(`${sheetCoverName ?? 'They'} stays on the shift. The cover request is closed.`);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Could not close the cover request.');
+    } finally {
+      setBusy(false);
+    }
+  };
   const sheetRows = useMemo(() => {
     if (!sheetBlock || !slotSheet) return [];
     const block = {
@@ -300,7 +329,10 @@ export default function ScheduleScreen() {
           <ChevronLeft size={20} color={C.pine} />
         </Pressable>
         <View className="items-center">
-          <Text className="text-sm font-semibold text-foreground">{fmtWeekLabel(weekStart)}</Text>
+          <Text className="text-sm font-semibold text-foreground">
+            {offset === 0 ? 'This week' : offset === 1 ? 'Next week' : fmtWeekLabel(weekStart)}
+            {offset === 0 || offset === 1 ? ` · ${fmtWeekLabel(weekStart)}` : ''}
+          </Text>
           <Text
             className={`text-[11px] font-semibold ${
               status === 'Published' ? 'text-solo-ink' : 'text-muted-foreground'
@@ -583,8 +615,17 @@ export default function ScheduleScreen() {
               return (
                 <View key={r.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
                   <Text className="text-xs font-semibold text-foreground">
-                    {emp?.name ?? 'Team'} · {DAY_SHORT[r.weekday]} ·{' '}
-                    {r.kind === 'evening' ? 'evening before' : r.kind === 'soon' ? 'before shift' : r.kind}
+                    {emp?.name ?? 'Team'}
+                    {r.kind === 'published' ? '' : ` · ${DAY_SHORT[r.weekday]}`} ·{' '}
+                    {r.kind === 'evening'
+                      ? 'evening before'
+                      : r.kind === 'soon'
+                        ? 'before shift'
+                        : r.kind === 'published'
+                          ? 'week summary'
+                          : r.kind === 'request'
+                            ? 'availability request'
+                            : r.kind}
                   </Text>
                   <Text className="mt-0.5 text-xs text-muted-foreground">{r.body}</Text>
                 </View>
@@ -603,6 +644,25 @@ export default function ScheduleScreen() {
         }
       >
         <View className="gap-2 pb-4">
+          {sheetCovers.length > 0 ? (
+            <Notice
+              tone="danger"
+              title={`${sheetCoverName ?? 'They'} asked for cover`}
+              body="Pick someone below to take over, or keep them on if they can make it after all."
+              action={
+                <View className="mt-2">
+                  <Btn
+                    label={`Keep ${sheetCoverName ?? 'them'} on this shift`}
+                    size="sm"
+                    variant="ghost"
+                    full={false}
+                    loading={busy}
+                    onPress={keepOnShift}
+                  />
+                </View>
+              }
+            />
+          ) : null}
           {sheetRows.length > 0 && !sheetRows.some((r) => r.ok || r.overLimit) ? (
             <Notice
               tone="info"

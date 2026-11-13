@@ -299,6 +299,8 @@ export function findClashes(
     if (!block) continue;
     const emp = ctx.employees.find((e) => e.id === assignment.employeeId);
     if (!emp?.active) continue;
+    // A cover request already shows this slot as a gap; don't count it twice.
+    if (ctx.coverDays.has(`${assignment.employeeId}:${assignment.weekday}`)) continue;
 
     const scoped: EngineContext = {
       ...ctx,

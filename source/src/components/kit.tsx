@@ -455,7 +455,7 @@ export function TimeField({
         </Text>
       </PressScale>
       <Sheet visible={open} onClose={() => setOpen(false)} title={label ?? 'Pick a time'}>
-        <View className="flex-row flex-wrap gap-2 pb-4">
+        <View className="flex-row flex-wrap justify-between gap-y-2 pb-4">
           {TIME_OPTIONS.map((m) => (
             <PressScale
               key={m}
@@ -464,12 +464,14 @@ export function TimeField({
                 onChange(m);
                 setOpen(false);
               }}
-              className={`rounded-lg border px-3 py-2 ${
+              accessibilityState={{ selected: m === value }}
+              style={{ width: '23.5%' }}
+              className={`items-center rounded-lg border py-2.5 ${
                 m === value ? 'border-primary bg-primary' : 'border-border bg-card'
               }`}
             >
               <Text
-                className={`text-sm font-medium ${
+                className={`text-[13px] font-medium ${
                   m === value ? 'text-primary-foreground' : 'text-foreground'
                 }`}
               >
