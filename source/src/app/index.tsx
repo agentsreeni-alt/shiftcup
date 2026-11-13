@@ -1,21 +1,25 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Coffee, Sparkles } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Btn } from '@/components/kit';
+import { useSession } from '@/ctx';
 import { C } from '@/lib/colors';
 import { EASE_OUT, raisedShadow } from '@/lib/motion';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { session } = useSession();
   const reduced = useReducedMotion();
   // First-visit only, so it can afford a short stagger. Never blocks taps.
   const enter = (i: number) =>
     reduced
       ? FadeIn.duration(200)
       : FadeInDown.duration(420).delay(i * 70).easing(EASE_OUT);
+
+  if (session) return <Redirect href="/(app)/home" />;
 
   return (
     <SafeAreaView className="flex-1 bg-background">

@@ -34,8 +34,9 @@ function RootLayoutNav() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      {/* Always reachable: signed-in visitors to "/" are redirected to home by the screen. */}
+      <Stack.Screen name="index" />
       <Stack.Protected guard={!session}>
-        <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
       <Stack.Protected guard={!!session}>
