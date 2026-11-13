@@ -20,15 +20,18 @@ export default function ManagerLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.pine,
-        tabBarInactiveTintColor: C.muted,
+        tabBarInactiveTintColor: '#8A968D',
+        // Tabs are peers: switching never animates (used dozens of times a session).
+        animation: 'none',
         tabBarStyle: {
           backgroundColor: C.white,
-          borderTopColor: C.border,
-          height: 62 + insets.bottom,
+          borderTopWidth: 0,
+          boxShadow: '0 -1px 0 rgba(20, 56, 44, 0.06), 0 -8px 24px -12px rgba(20, 56, 44, 0.14)',
+          height: 64 + insets.bottom,
           paddingBottom: insets.bottom + 6,
-          paddingTop: 6,
+          paddingTop: 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
       }}
     >
       <Tabs.Screen

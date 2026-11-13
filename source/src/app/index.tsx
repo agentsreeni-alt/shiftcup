@@ -1,34 +1,49 @@
 import { useRouter } from 'expo-router';
 import { Coffee, Sparkles } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Btn } from '@/components/kit';
 import { C } from '@/lib/colors';
+import { EASE_OUT, raisedShadow } from '@/lib/motion';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const reduced = useReducedMotion();
+  // First-visit only, so it can afford a short stagger. Never blocks taps.
+  const enter = (i: number) =>
+    reduced
+      ? FadeIn.duration(200)
+      : FadeInDown.duration(420).delay(i * 70).easing(EASE_OUT);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-1 justify-between px-6 pb-6 pt-10">
-        <View className="items-center gap-5 pt-8">
-          <View
-            className="h-24 w-24 items-center justify-center rounded-3xl"
-            style={{ backgroundColor: C.pine, borderCurve: 'continuous' }}
-          >
-            <Coffee size={44} color={C.pistachio} strokeWidth={1.8} />
-          </View>
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold tracking-tight text-foreground">ShiftCup</Text>
-            <Text className="max-w-[280px] text-center text-base leading-6 text-muted-foreground">
+        <View className="items-center gap-6 pt-10">
+          <Animated.View entering={enter(0)}>
+            <View
+              className="h-24 w-24 items-center justify-center rounded-[28px]"
+              style={[{ backgroundColor: C.pine, borderCurve: 'continuous' }, raisedShadow]}
+            >
+              <Coffee size={44} color={C.pistachio} strokeWidth={1.8} />
+            </View>
+          </Animated.View>
+          <Animated.View entering={enter(1)} style={{ alignItems: 'center', gap: 10 }}>
+            <Text
+              className="text-[40px] font-bold leading-[44px] text-foreground"
+              style={{ letterSpacing: -1.2 }}
+            >
+              ShiftCup
+            </Text>
+            <Text className="max-w-[290px] text-center text-base leading-6 text-muted-foreground">
               Weekly schedules for one café. Your team says when they can work, ShiftCup drafts
               the week, you approve it.
             </Text>
-          </View>
+          </Animated.View>
         </View>
 
-        <View className="gap-3">
+        <Animated.View entering={enter(2)} style={{ gap: 12 }}>
           <Btn
             label="Set up my café"
             size="lg"
@@ -57,7 +72,7 @@ export default function WelcomeScreen() {
               I have an invite code from my manager
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
         <View className="flex-row items-center justify-center gap-3 pt-4">
           {[

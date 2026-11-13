@@ -20,8 +20,8 @@
     --accent-foreground: 160 47% 15%;
     --destructive: 345 65% 43%;
     --destructive-foreground: 0 0% 100%;
-    --border: 85 25% 86%;
-    --input: 85 25% 86%;
+    --border: 85 22% 88%;
+    --input: 85 20% 84%;
     --ring: 160 47% 15%;
     --radius: 0.75rem;
   }
@@ -43,9 +43,76 @@
     --accent-foreground: 160 47% 15%;
     --destructive: 345 65% 43%;
     --destructive-foreground: 0 0% 100%;
-    --border: 85 25% 86%;
-    --input: 85 25% 86%;
+    --border: 85 22% 88%;
+    --input: 85 20% 84%;
     --ring: 160 47% 15%;
     --radius: 0.75rem;
+  }
+}
+
+/* ---- Web polish (mobile-native baseline) ---- */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Replace the browser's default focus outline with a calm brand ring */
+input:focus,
+textarea:focus {
+  outline: none;
+}
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: hsl(160 47% 15% / 0.55) !important;
+  box-shadow: 0 0 0 4px hsl(84 57% 72% / 0.45);
+}
+[role='button']:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid hsl(160 47% 15% / 0.6);
+  outline-offset: 2px;
+}
+
+[role='button'],
+button,
+a {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Press feedback: quick strong ease-out, interruptible transitions */
+[role='button'],
+button {
+  transition-property: transform, opacity, background-color, box-shadow;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+input,
+textarea {
+  transition-property: border-color, box-shadow;
+  transition-duration: 160ms;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [role='button'],
+  button {
+    transition-property: opacity, background-color;
+  }
+  [role='button']:active,
+  button:active {
+    transform: none !important;
   }
 }

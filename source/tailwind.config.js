@@ -5,6 +5,11 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      boxShadow: {
+        card: '0 1px 2px rgba(20, 56, 44, 0.05), 0 4px 14px -6px rgba(20, 56, 44, 0.10)',
+        raised: '0 1px 2px rgba(20, 56, 44, 0.08), 0 10px 28px -10px rgba(20, 56, 44, 0.28)',
+        bar: '0 -1px 0 rgba(20, 56, 44, 0.06), 0 -8px 24px -12px rgba(20, 56, 44, 0.12)',
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

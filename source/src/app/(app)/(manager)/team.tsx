@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { AppBar, Btn, Card, Notice, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
+import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
 import {
   addEmployee,
   currentWeekStart,
@@ -226,15 +226,15 @@ export default function TeamScreen() {
                 : 'Not sent yet for this week.'}
             </Text>
           </View>
-          <Pressable
+          <PressScale
             onPress={sendRequest}
-            className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2 active:opacity-70"
+            className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
           >
             <Send size={13} color={C.cream} />
             <Text className="text-xs font-semibold text-primary-foreground">
               {data.request ? 'Resend' : 'Send request'}
             </Text>
-          </Pressable>
+          </PressScale>
         </View>
         {waiting.length > 0 ? (
           <View className="mt-3 gap-1.5">
@@ -339,19 +339,19 @@ export default function TeamScreen() {
                   </Text>
                 </View>
                 <View className="flex-row items-center gap-1">
-                  <Pressable
+                  <PressScale
                     onPress={() => bumpRating(emp, -1)}
-                    className="h-7 w-7 items-center justify-center rounded-full border border-border active:opacity-60"
+                    className="h-7 w-7 items-center justify-center rounded-full border border-border"
                   >
                     <Minus size={12} color={C.pine} />
-                  </Pressable>
+                  </PressScale>
                   <Stars value={emp.rating} />
-                  <Pressable
+                  <PressScale
                     onPress={() => bumpRating(emp, 1)}
-                    className="h-7 w-7 items-center justify-center rounded-full border border-border active:opacity-60"
+                    className="h-7 w-7 items-center justify-center rounded-full border border-border"
                   >
                     <Plus size={12} color={C.pine} />
-                  </Pressable>
+                  </PressScale>
                 </View>
               </View>
 
@@ -359,7 +359,7 @@ export default function TeamScreen() {
                 {ROLES.map((r) => {
                   const on = emp.roles.includes(r.key);
                   return (
-                    <Pressable
+                    <PressScale
                       key={r.key}
                       onPress={() => toggleRole(emp, r.key)}
                       className={`rounded-full px-2.5 py-1 ${
@@ -373,10 +373,10 @@ export default function TeamScreen() {
                       >
                         {r.label}
                       </Text>
-                    </Pressable>
+                    </PressScale>
                   );
                 })}
-                <Pressable
+                <PressScale
                   onPress={() => toggleSolo(emp)}
                   className={`rounded-full px-2.5 py-1 ${
                     emp.can_work_alone ? 'bg-accent' : 'border border-border bg-card'
@@ -389,7 +389,7 @@ export default function TeamScreen() {
                   >
                     Can work alone
                   </Text>
-                </Pressable>
+                </PressScale>
               </View>
 
               <View className="mt-3 flex-row gap-1">
@@ -408,29 +408,29 @@ export default function TeamScreen() {
                         ? 'bg-accent'
                         : 'bg-secondary';
                   return (
-                    <Pressable
+                    <PressScale
                       key={d}
                       onPress={() => setDaySheet({ employee: emp, weekday: i })}
-                      className={`flex-1 items-center rounded-lg py-1.5 ${tone} active:opacity-70`}
+                      className={`flex-1 items-center rounded-lg py-1.5 ${tone}`}
                     >
                       <Text className="text-[9px] font-bold uppercase text-muted-foreground">
                         {d}
                       </Text>
                       <Text className="text-[10px] font-semibold text-foreground">{label}</Text>
-                    </Pressable>
+                    </PressScale>
                   );
                 })}
               </View>
 
               <View className="mt-3 flex-row gap-2">
-                <Pressable
+                <PressScale
                   onPress={() => setMemberSheet({ open: true, editing: emp })}
-                  className="flex-1 items-center rounded-lg border border-border py-2 active:opacity-70"
+                  className="flex-1 items-center rounded-lg border border-border py-2"
                 >
                   <Text className="text-xs font-semibold text-foreground">Edit</Text>
-                </Pressable>
+                </PressScale>
                 {emp.active ? (
-                  <Pressable
+                  <PressScale
                     onPress={async () => {
                       if (!cafe) return;
                       await deactivateEmployee(cafe.id, emp.id);
@@ -439,7 +439,7 @@ export default function TeamScreen() {
                     className="flex-1 items-center rounded-lg border border-border py-2 active:opacity-70"
                   >
                     <Text className="text-xs font-semibold text-destructive">Deactivate</Text>
-                  </Pressable>
+                  </PressScale>
                 ) : null}
               </View>
             </Card>
@@ -598,7 +598,7 @@ function MemberSheet({
           {ROLES.map((r) => {
             const on = roles.includes(r.key);
             return (
-              <Pressable
+              <PressScale
                 key={r.key}
                 onPress={() =>
                   setRoles((prev) =>
@@ -616,10 +616,10 @@ function MemberSheet({
                 >
                   {r.label}
                 </Text>
-              </Pressable>
+              </PressScale>
             );
           })}
-          <Pressable
+          <PressScale
             onPress={() => setSolo((s) => !s)}
             className={`rounded-full px-3 py-1.5 ${
               solo ? 'bg-accent' : 'border border-border bg-card'
@@ -632,25 +632,25 @@ function MemberSheet({
             >
               Can work alone
             </Text>
-          </Pressable>
+          </PressScale>
         </View>
 
         <View className="flex-row items-center justify-between rounded-xl border border-border px-3 py-2.5">
           <Text className="text-sm text-foreground">Rating</Text>
           <View className="flex-row items-center gap-2">
-            <Pressable
+            <PressScale
               onPress={() => setRating((r) => Math.max(1, r - 1))}
               className="h-7 w-7 items-center justify-center rounded-full border border-border"
             >
               <Minus size={12} color={C.pine} />
-            </Pressable>
+            </PressScale>
             <Stars value={rating} />
-            <Pressable
+            <PressScale
               onPress={() => setRating((r) => Math.min(5, r + 1))}
               className="h-7 w-7 items-center justify-center rounded-full border border-border"
             >
               <Plus size={12} color={C.pine} />
-            </Pressable>
+            </PressScale>
           </View>
         </View>
 
@@ -735,7 +735,7 @@ function DaySheet({
       <View className="gap-3 pb-4">
         <View className="flex-row gap-1.5">
           {options.map((o) => (
-            <Pressable
+            <PressScale
               key={o.key}
               onPress={() => setKind(o.key)}
               className={`flex-1 items-center rounded-xl py-2.5 ${
@@ -749,7 +749,7 @@ function DaySheet({
               >
                 {o.label}
               </Text>
-            </Pressable>
+            </PressScale>
           ))}
         </View>
         {kind === 'window' ? (

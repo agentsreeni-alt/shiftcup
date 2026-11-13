@@ -1,10 +1,10 @@
 import { useRouter } from 'expo-router';
 import { ChevronRight } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { AppBar, Btn, Card, Screen, SectionTitle, Sheet } from '@/components/kit';
+import { AppBar, Btn, Card, PressScale, Screen, SectionTitle, Sheet } from '@/components/kit';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 
@@ -69,14 +69,14 @@ export default function EmployeeProfileScreen() {
           { label: 'Terms of Service', page: 'terms' },
           { label: 'Support', page: 'support' },
         ].map((item) => (
-          <Pressable
+          <PressScale
             key={item.page}
             onPress={() => router.push(`/legal?page=${item.page}`)}
-            className="flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 active:opacity-70"
+            className="flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5"
           >
             <Text className="text-sm text-foreground">{item.label}</Text>
             <ChevronRight size={16} color={C.muted} />
-          </Pressable>
+          </PressScale>
         ))}
       </View>
 

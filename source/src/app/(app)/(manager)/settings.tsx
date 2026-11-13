@@ -3,7 +3,7 @@ import { ChevronRight, CreditCard, Plus, Trash2 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { AppBar, Btn, Card, Screen, SectionTitle, Sheet, TimeField } from '@/components/kit';
+import { AppBar, Btn, Card, PressScale, Screen, SectionTitle, Sheet, TimeField } from '@/components/kit';
 import {
   addBlock,
   deleteBlock,
@@ -133,7 +133,7 @@ export default function SettingsScreen() {
         <Text className="mb-2 text-xs text-muted-foreground">Availability due</Text>
         <View className="mb-3 flex-row gap-1">
           {DAY_SHORT.map((d, i) => (
-            <Pressable
+            <PressScale
               key={d}
               onPress={() => patchSettings({ due_weekday: i })}
               className={`flex-1 items-center rounded-lg py-2 ${
@@ -147,7 +147,7 @@ export default function SettingsScreen() {
               >
                 {d}
               </Text>
-            </Pressable>
+            </PressScale>
           ))}
         </View>
         <View className="mb-4">
@@ -161,7 +161,7 @@ export default function SettingsScreen() {
         <Text className="mb-2 text-xs text-muted-foreground">Publish the schedule on</Text>
         <View className="mb-4 flex-row gap-1">
           {DAY_SHORT.map((d, i) => (
-            <Pressable
+            <PressScale
               key={d}
               onPress={() => patchSettings({ publish_weekday: i })}
               className={`flex-1 items-center rounded-lg py-2 ${
@@ -175,7 +175,7 @@ export default function SettingsScreen() {
               >
                 {d}
               </Text>
-            </Pressable>
+            </PressScale>
           ))}
         </View>
 
@@ -199,32 +199,32 @@ export default function SettingsScreen() {
         <View className="mt-4 flex-row items-center justify-between rounded-xl border border-border px-3 py-2.5">
           <Text className="text-sm text-foreground">Longest shift per day</Text>
           <View className="flex-row items-center gap-2">
-            <Pressable
+            <PressScale
               onPress={() =>
                 patchSettings({ max_shift_hours: Math.max(2, (settings?.max_shift_hours ?? 8) - 1) })
               }
               className="h-7 w-7 items-center justify-center rounded-full border border-border"
             >
               <Text className="text-sm font-bold text-foreground">−</Text>
-            </Pressable>
+            </PressScale>
             <Text className="w-10 text-center text-sm font-semibold text-foreground">
               {settings?.max_shift_hours ?? 8}h
             </Text>
-            <Pressable
+            <PressScale
               onPress={() =>
                 patchSettings({ max_shift_hours: Math.min(14, (settings?.max_shift_hours ?? 8) + 1) })
               }
               className="h-7 w-7 items-center justify-center rounded-full border border-border"
             >
               <Text className="text-sm font-bold text-foreground">+</Text>
-            </Pressable>
+            </PressScale>
           </View>
         </View>
 
         <Text className="mb-2 mt-4 text-xs text-muted-foreground">Send messages by</Text>
         <View className="flex-row gap-2">
           {(['email', 'text'] as const).map((ch) => (
-            <Pressable
+            <PressScale
               key={ch}
               onPress={() => patchSettings({ channel: ch })}
               className={`flex-1 items-center rounded-xl py-2.5 ${
@@ -238,7 +238,7 @@ export default function SettingsScreen() {
               >
                 {ch === 'email' ? 'Email' : 'Text message'}
               </Text>
-            </Pressable>
+            </PressScale>
           ))}
         </View>
       </Card>
@@ -295,10 +295,10 @@ export default function SettingsScreen() {
               ) : (
                 <View className="gap-1.5">
                   {dayBlocks.map((b) => (
-                    <Pressable
+                    <PressScale
                       key={b.id}
                       onPress={() => setBlockSheet({ open: true, weekday: i, editing: b })}
-                      className="flex-row items-center justify-between rounded-lg border border-border px-3 py-2 active:opacity-70"
+                      className="flex-row items-center justify-between rounded-lg border border-border px-3 py-2"
                     >
                       <Text className="text-sm text-foreground">
                         {fmtRange(b.start_min, b.end_min)}
@@ -306,7 +306,7 @@ export default function SettingsScreen() {
                       <Text className="text-[11px] font-semibold uppercase text-muted-foreground">
                         {b.rule === 'two' ? 'Two people' : 'Solo allowed'}
                       </Text>
-                    </Pressable>
+                    </PressScale>
                   ))}
                 </View>
               )}
@@ -316,9 +316,9 @@ export default function SettingsScreen() {
       </View>
 
       <SectionTitle>Plan</SectionTitle>
-      <Pressable
+      <PressScale
         onPress={() => router.push('/(app)/billing')}
-        className="flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 active:opacity-70"
+        className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card shadow-card px-4 py-4"
       >
         <CreditCard size={18} color={C.pine} />
         <View className="flex-1">
@@ -334,7 +334,7 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <ChevronRight size={16} color={C.muted} />
-      </Pressable>
+      </PressScale>
 
       <SectionTitle>About</SectionTitle>
       <View className="gap-2">
@@ -343,14 +343,14 @@ export default function SettingsScreen() {
           { label: 'Terms of Service', page: 'terms' },
           { label: 'Support', page: 'support' },
         ].map((item) => (
-          <Pressable
+          <PressScale
             key={item.page}
             onPress={() => router.push(`/legal?page=${item.page}`)}
-            className="flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 active:opacity-70"
+            className="flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5"
           >
             <Text className="text-sm text-foreground">{item.label}</Text>
             <ChevronRight size={16} color={C.muted} />
-          </Pressable>
+          </PressScale>
         ))}
       </View>
 
@@ -444,7 +444,7 @@ function BlockSheet({
         </View>
         <View className="flex-row gap-2">
           {(['solo', 'two'] as const).map((r) => (
-            <Pressable
+            <PressScale
               key={r}
               onPress={() => setRule(r)}
               className={`flex-1 items-center rounded-xl py-3 ${
@@ -458,7 +458,7 @@ function BlockSheet({
               >
                 {r === 'solo' ? 'Solo allowed' : 'Two people'}
               </Text>
-            </Pressable>
+            </PressScale>
           ))}
         </View>
         <Text className="text-xs text-muted-foreground">

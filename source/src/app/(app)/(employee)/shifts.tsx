@@ -1,9 +1,9 @@
 import { useFocusEffect } from 'expo-router';
 import { Bell, CalendarX } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { AppBar, Btn, Card, EmptyState, Notice, Screen, SectionTitle, Sheet } from '@/components/kit';
+import { AppBar, Btn, Card, EmptyState, Notice, PressScale, Screen, SectionTitle, Sheet } from '@/components/kit';
 import {
   createCoverRequest,
   currentWeekStart,
@@ -109,14 +109,14 @@ export default function MyShiftsScreen() {
                     Cover asked
                   </Text>
                 ) : (
-                  <Pressable
+                  <PressScale
                     onPress={() => setConfirm(a)}
-                    className="rounded-lg bg-card px-3 py-1.5 active:opacity-70"
+                    className="rounded-lg bg-card px-3 py-1.5"
                   >
                     <Text className="text-[11px] font-semibold text-destructive">
                       I can&apos;t make it
                     </Text>
-                  </Pressable>
+                  </PressScale>
                 )}
               </View>
             </View>

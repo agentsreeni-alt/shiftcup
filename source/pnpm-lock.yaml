@@ -142,6 +142,9 @@ importers:
       expo-font:
         specifier: ~55.0.4
         version: 55.0.8(expo@55.0.6)(react-native@0.83.2(patch_hash=bc87e66a7a5c2e0fbe5d1be5c20d1c6b8456e84ea287a1acb15202264b4f2c37)(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)
+      expo-haptics:
+        specifier: ~55.0.18
+        version: 55.0.18(expo@55.0.6)
       expo-linking:
         specifier: ~55.0.7
         version: 55.0.17(expo@55.0.6)(react-native@0.83.2(patch_hash=bc87e66a7a5c2e0fbe5d1be5c20d1c6b8456e84ea287a1acb15202264b4f2c37)(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)
@@ -3293,6 +3296,11 @@ packages:
       expo: '*'
       react: '*'
       react-native: '*'
+
+  expo-haptics@55.0.18:
+    resolution: {integrity: sha512-bEH0bf5bBGn7U2eTZVdiXBUk4vTfNGbfv9/9PCYLg3gL7L/WE2g8WKs2vYg1B4/BDSucyO8prZofH3IgvLJojQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-image@55.0.11:
     resolution: {integrity: sha512-PVIBYQJW/h1f6Zb9xnoWlgfqyOPVm2yb6eo6ZogaKbvMrhb/Q/fiERbagi4oqmR6IPljWPEpkXXQyFBUh7TjpQ==}
@@ -8760,6 +8768,10 @@ snapshots:
       expo: 55.0.6(patch_hash=d2507f55976f6c5da8f35d26906f4bd46415e042570afc3bd7c543c86abc5a61)(@babel/core@7.29.7)(@expo/dom-webview@55.0.6)(@expo/metro-runtime@55.0.12)(expo-router@55.0.5)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(patch_hash=bc87e66a7a5c2e0fbe5d1be5c20d1c6b8456e84ea287a1acb15202264b4f2c37)(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       react: 19.2.0
       react-native: 0.83.2(patch_hash=bc87e66a7a5c2e0fbe5d1be5c20d1c6b8456e84ea287a1acb15202264b4f2c37)(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0)
+
+  expo-haptics@55.0.18(expo@55.0.6):
+    dependencies:
+      expo: 55.0.6(patch_hash=d2507f55976f6c5da8f35d26906f4bd46415e042570afc3bd7c543c86abc5a61)(@babel/core@7.29.7)(@expo/dom-webview@55.0.6)(@expo/metro-runtime@55.0.12)(expo-router@55.0.5)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(patch_hash=bc87e66a7a5c2e0fbe5d1be5c20d1c6b8456e84ea287a1acb15202264b4f2c37)(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
 
   expo-image@55.0.11(expo@55.0.6)(react-native-web@0.21.4(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.2(patch_hash=bc87e66a7a5c2e0fbe5d1be5c20d1c6b8456e84ea287a1acb15202264b4f2c37)(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0):
     dependencies:

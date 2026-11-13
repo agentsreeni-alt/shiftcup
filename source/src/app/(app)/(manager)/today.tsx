@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
 import { AlertTriangle, ArrowRight, Bell, CalendarCheck, Clock, Users } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { AppBar, Btn, Card, Notice, Screen, SectionTitle } from '@/components/kit';
+import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle } from '@/components/kit';
 import {
   currentWeekStart,
   publishWeek,
@@ -298,14 +298,14 @@ export default function TodayScreen() {
 
       <SectionTitle>This week at a glance</SectionTitle>
       <View className="flex-row gap-2">
-        <View className="flex-1 rounded-2xl border border-border bg-card p-4">
+        <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
           <CalendarCheck size={16} color={C.pine} />
           <Text className="mt-2 text-2xl font-bold text-foreground">
             {fmtHours(data.totalMinutes)}
           </Text>
           <Text className="text-xs text-muted-foreground">Scheduled hours</Text>
         </View>
-        <View className="flex-1 rounded-2xl border border-border bg-card p-4">
+        <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
           <Clock size={16} color={C.pine} />
           <Text className="mt-2 text-2xl font-bold text-foreground">
             {fmtMoney(data.totalWages)}
@@ -336,9 +336,9 @@ function AttentionRow({
 }) {
   const clear = value === 0;
   return (
-    <Pressable
+    <PressScale
       onPress={onPress}
-      className="flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 active:opacity-70"
+      className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card shadow-card px-4 py-3"
     >
       <View
         className="h-9 w-9 items-center justify-center rounded-full"
@@ -360,6 +360,6 @@ function AttentionRow({
         </Text>
         <ArrowRight size={14} color={C.muted} />
       </View>
-    </Pressable>
+    </PressScale>
   );
 }

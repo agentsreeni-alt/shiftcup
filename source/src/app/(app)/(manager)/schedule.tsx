@@ -12,7 +12,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { AppBar, Btn, Card, Notice, Screen, SectionTitle, Sheet, Stars } from '@/components/kit';
+import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Stars } from '@/components/kit';
 import {
   currentWeekStart,
   loadAssignments,
@@ -272,7 +272,7 @@ export default function ScheduleScreen() {
     <Screen>
       <AppBar title="Schedule" subtitle={cafe?.name ?? ''} />
 
-      <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-border bg-card px-2 py-2">
+      <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card shadow-card px-2 py-2">
         <Pressable onPress={() => setOffset((o) => o - 1)} className="p-2 active:opacity-60">
           <ChevronLeft size={20} color={C.pine} />
         </Pressable>
@@ -331,7 +331,7 @@ export default function ScheduleScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <Pressable
+                <PressScale
                   onPress={() => {
                     setDay(g.weekday);
                     setSlotSheet({ blockId: g.blockId, slot: g.slot });
@@ -339,7 +339,7 @@ export default function ScheduleScreen() {
                   className="rounded-lg bg-primary px-3 py-1.5 active:opacity-70"
                 >
                   <Text className="text-xs font-semibold text-primary-foreground">Fix</Text>
-                </Pressable>
+                </PressScale>
               </View>
             </View>
           ))}
@@ -360,7 +360,7 @@ export default function ScheduleScreen() {
                   </Text>
                   <Text className="mt-0.5 text-xs text-destructive">{c.reason}</Text>
                 </View>
-                <Pressable
+                <PressScale
                   onPress={() => {
                     setDay(c.weekday);
                     setSlotSheet({ blockId: c.blockId, slot: c.slot });
@@ -368,7 +368,7 @@ export default function ScheduleScreen() {
                   className="rounded-lg bg-primary px-3 py-1.5 active:opacity-70"
                 >
                   <Text className="text-xs font-semibold text-primary-foreground">Fix</Text>
-                </Pressable>
+                </PressScale>
               </View>
             </View>
           ))}
@@ -378,7 +378,7 @@ export default function ScheduleScreen() {
       <SectionTitle>Pick a day</SectionTitle>
       <View className="flex-row gap-1.5">
         {DAY_SHORT.map((d, i) => (
-          <Pressable
+          <PressScale
             key={d}
             onPress={() => setDay(i)}
             className={`flex-1 items-center rounded-xl py-2.5 ${
@@ -392,7 +392,7 @@ export default function ScheduleScreen() {
             >
               {d}
             </Text>
-          </Pressable>
+          </PressScale>
         ))}
       </View>
 
@@ -587,19 +587,19 @@ export default function ScheduleScreen() {
                   ) : null}
                 </View>
                 {row.ok ? (
-                  <Pressable
+                  <PressScale
                     onPress={() => assign(row.emp.id)}
-                    className="rounded-lg bg-primary px-3 py-2 active:opacity-70"
+                    className="rounded-lg bg-primary px-3 py-2"
                   >
                     <Text className="text-xs font-semibold text-primary-foreground">Assign</Text>
-                  </Pressable>
+                  </PressScale>
                 ) : row.overLimit ? (
-                  <Pressable
+                  <PressScale
                     onPress={() => assign(row.emp.id, true)}
-                    className="rounded-lg border border-destructive px-3 py-2 active:opacity-70"
+                    className="rounded-lg border border-destructive px-3 py-2"
                   >
                     <Text className="text-xs font-semibold text-destructive">Assign anyway</Text>
-                  </Pressable>
+                  </PressScale>
                 ) : null}
               </View>
             </View>

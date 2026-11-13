@@ -45,11 +45,11 @@ export default function AdminScreen() {
       <AppBar title="All cafés" subtitle={`${cafes.length} accounts`} />
 
       <View className="mb-4 flex-row gap-2">
-        <View className="flex-1 rounded-2xl border border-border bg-card p-4">
+        <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
           <Text className="text-2xl font-bold text-foreground">${mrr}</Text>
           <Text className="text-xs text-muted-foreground">Monthly revenue</Text>
         </View>
-        <View className="flex-1 rounded-2xl border border-border bg-card p-4">
+        <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
           <Text className="text-2xl font-bold text-foreground">{paying.length}</Text>
           <Text className="text-xs text-muted-foreground">Paying cafés</Text>
         </View>

@@ -8,12 +8,68 @@ import {
   Text,
   TextInput,
   View,
+  type PressableProps,
+  type StyleProp,
   type TextInputProps,
+  type ViewStyle,
 } from 'react-native';
+import Animated, {
+  FadeIn,
+  SlideInDown,
+  useAnimatedStyle,
+  useReducedMotion,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C } from '@/lib/colors';
 import { fmtTime } from '@/lib/dates';
+import { tickSelection } from '@/lib/haptics';
+import {
+  EASE_OUT,
+  EASE_SHEET,
+  PRESS_SCALE,
+  cardShadow,
+  pressTransition,
+  raisedShadow,
+} from '@/lib/motion';
+
+/**
+ * Pressable with physical press feedback: scales to 0.97 on press-in (feedback on press,
+ * commit on release). Use for any tappable surface instead of an opacity flash.
+ */
+export function PressScale({
+  style,
+  scale = PRESS_SCALE,
+  disabled,
+  ...props
+}: PressableProps & { scale?: number; className?: string; style?: StyleProp<ViewStyle> }) {
+  const reduced = useReducedMotion();
+  // Pressed state is tracked here (NativeWind drops function-form styles on Pressable).
+  const [pressed, setPressed] = useState(false);
+  const down = pressed && !disabled;
+  return (
+    <Pressable
+      disabled={disabled}
+      pressRetentionOffset={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      {...props}
+      onPressIn={(e) => {
+        setPressed(true);
+        props.onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        setPressed(false);
+        props.onPressOut?.(e);
+      }}
+      style={[
+        pressTransition,
+        { transform: [{ scale: down && !reduced ? scale : 1 }] },
+        down && reduced ? { opacity: 0.85 } : null,
+        style,
+      ]}
+    />
+  );
+}
 
 export function Screen({
   children,
@@ -56,9 +112,14 @@ export function AppBar({
   return (
     <View className="mb-4 flex-row items-start justify-between gap-3">
       <View className="flex-1">
-        <Text className="text-2xl font-bold text-foreground">{title}</Text>
+        <Text
+          className="text-[28px] font-bold leading-[34px] text-foreground"
+          style={{ letterSpacing: -0.6 }}
+        >
+          {title}
+        </Text>
         {subtitle ? (
-          <Text className="mt-1 text-sm text-muted-foreground">{subtitle}</Text>
+          <Text className="mt-0.5 text-sm font-medium text-muted-foreground">{subtitle}</Text>
         ) : null}
       </View>
       {right}
@@ -75,8 +136,8 @@ export function Card({
 }) {
   return (
     <View
-      className={`rounded-2xl border border-border bg-card p-4 ${className}`}
-      style={{ borderCurve: 'continuous' }}
+      className={`rounded-2xl border border-border/60 bg-card p-4 ${className}`}
+      style={[{ borderCurve: 'continuous' }, cardShadow]}
     >
       {children}
     </View>
@@ -85,7 +146,10 @@ export function Card({
 
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <Text className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <Text
+      className="mb-2.5 mt-7 px-1 text-[11px] font-semibold uppercase text-muted-foreground"
+      style={{ letterSpacing: 0.8 }}
+    >
       {children}
     </Text>
   );
@@ -125,9 +189,9 @@ export function Pill({
   );
   if (!onPress) return content;
   return (
-    <Pressable onPress={onPress} className="active:opacity-70">
+    <PressScale onPress={onPress} scale={0.95} hitSlop={8}>
       {content}
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -170,17 +234,34 @@ export function Btn({
     lg: 'px-5 py-4',
   };
   return (
-    <Pressable
+    <PressScale
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
       className={`flex-row items-center justify-center gap-2 rounded-xl ${sizes[size]} ${
         variants[variant]
-      } ${full ? 'w-full' : ''} ${disabled ? 'opacity-40' : 'active:opacity-80'}`}
-      style={{ borderCurve: 'continuous' }}
+      } ${full ? 'w-full' : ''} ${disabled ? 'opacity-40' : ''}`}
+      style={[
+        { borderCurve: 'continuous' },
+        (variant === 'primary' || variant === 'danger') && !disabled ? raisedShadow : null,
+      ]}
     >
-      {loading ? <ActivityIndicator size="small" color={C.cream} /> : icon}
-      <Text className={`text-base font-semibold ${textVariants[variant]}`}>{label}</Text>
-    </Pressable>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={variant === 'primary' || variant === 'danger' ? C.cream : C.pine}
+        />
+      ) : (
+        icon
+      )}
+      <Text
+        className={`text-base font-semibold ${textVariants[variant]}`}
+        style={{ letterSpacing: -0.2 }}
+      >
+        {label}
+      </Text>
+    </PressScale>
   );
 }
 
@@ -190,13 +271,25 @@ export function Field({
   error,
   ...props
 }: TextInputProps & { label: string; hint?: string; error?: string }) {
+  const [focused, setFocused] = useState(false);
   return (
     <View className="gap-1.5">
       <Text className="text-sm font-medium text-foreground">{label}</Text>
       <TextInput
-        placeholderTextColor={C.muted}
-        className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
+        placeholderTextColor="#8A968D"
+        className={`rounded-xl border bg-card px-4 py-3.5 text-base text-foreground ${
+          error ? 'border-destructive' : focused ? 'border-primary/50' : 'border-input'
+        }`}
+        style={{ borderCurve: 'continuous' }}
         {...props}
+        onFocus={(e) => {
+          setFocused(true);
+          props.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          props.onBlur?.(e);
+        }}
       />
       {hint ? <Text className="text-xs text-muted-foreground">{hint}</Text> : null}
       {error ? <Text className="text-xs text-destructive">{error}</Text> : null}
@@ -224,7 +317,7 @@ export function Notice({
   const t = tones[tone];
   return (
     <View
-      style={{ backgroundColor: t.bg, borderRadius: 14, padding: 14 }}
+      style={{ backgroundColor: t.bg, borderRadius: 14, padding: 14, borderCurve: 'continuous' }}
       className="gap-1"
     >
       <Text style={{ color: t.ink }} className="text-sm font-semibold">
@@ -252,8 +345,15 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <View className="items-center gap-2 rounded-2xl border border-dashed border-border bg-card px-6 py-10">
-      {icon}
+    <View
+      className="items-center gap-2 rounded-2xl border border-border/60 bg-card px-6 py-10"
+      style={[{ borderCurve: 'continuous' }, cardShadow]}
+    >
+      {icon ? (
+        <View className="mb-1 h-12 w-12 items-center justify-center rounded-full bg-muted">
+          {icon}
+        </View>
+      ) : null}
       <Text className="text-center text-base font-semibold text-foreground">{title}</Text>
       <Text className="text-center text-sm text-muted-foreground">{body}</Text>
       {action ? <View className="mt-2 w-full">{action}</View> : null}
@@ -273,24 +373,52 @@ export function Sheet({
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  // Backdrop fades while the panel rises on the iOS sheet curve. The Modal itself only
+  // fades, so the dim layer never slides up with the sheet.
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/40">
-        <Pressable className="flex-1" onPress={onClose} />
-        <View
-          className="max-h-[85%] rounded-t-3xl bg-card px-5 pt-4"
-          style={{ paddingBottom: insets.bottom + 20 }}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(12, 28, 22, 0.42)' }}>
+        <Pressable className="flex-1" onPress={onClose} accessibilityLabel="Close" />
+        <Animated.View
+          entering={
+            reduced
+              ? FadeIn.duration(180)
+              : SlideInDown.duration(340).easing(EASE_SHEET)
+          }
+          style={{ maxHeight: '85%' }}
         >
+          <View
+            className="rounded-t-[28px] bg-card px-5 pt-2.5"
+            style={[
+              { paddingBottom: insets.bottom + 20, borderCurve: 'continuous', maxHeight: '100%' },
+              { boxShadow: '0 -12px 40px -16px rgba(12, 28, 22, 0.35)' },
+            ]}
+          >
+          <View className="mb-2 items-center">
+            <View className="h-1.5 w-10 rounded-full bg-border" />
+          </View>
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="flex-1 text-lg font-bold text-foreground">{title}</Text>
-            <Pressable onPress={onClose} className="p-2 active:opacity-60">
-              <X size={20} color={C.pine} />
-            </Pressable>
+            <Text
+              className="flex-1 text-lg font-bold text-foreground"
+              style={{ letterSpacing: -0.3 }}
+            >
+              {title}
+            </Text>
+            <PressScale
+              onPress={onClose}
+              hitSlop={10}
+              accessibilityLabel="Close"
+              className="h-8 w-8 items-center justify-center rounded-full bg-muted"
+            >
+              <X size={16} color={C.pine} strokeWidth={2.4} />
+            </PressScale>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {children}
           </ScrollView>
-        </View>
+          </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -313,18 +441,25 @@ export function TimeField({
   return (
     <View className={compact ? '' : 'gap-1.5'}>
       {label ? <Text className="text-sm font-medium text-foreground">{label}</Text> : null}
-      <Pressable
+      <PressScale
         onPress={() => setOpen(true)}
-        className="rounded-xl border border-input bg-card px-3 py-2.5 active:opacity-70"
+        className="rounded-xl border border-input bg-card px-3 py-2.5"
+        style={{ borderCurve: 'continuous' }}
       >
-        <Text className="text-base font-medium text-foreground">{fmtTime(value)}</Text>
-      </Pressable>
+        <Text
+          className="text-base font-medium text-foreground"
+          style={{ fontVariant: ['tabular-nums'] }}
+        >
+          {fmtTime(value)}
+        </Text>
+      </PressScale>
       <Sheet visible={open} onClose={() => setOpen(false)} title={label ?? 'Pick a time'}>
         <View className="flex-row flex-wrap gap-2 pb-4">
           {TIME_OPTIONS.map((m) => (
-            <Pressable
+            <PressScale
               key={m}
               onPress={() => {
+                tickSelection();
                 onChange(m);
                 setOpen(false);
               }}
@@ -339,7 +474,7 @@ export function TimeField({
               >
                 {fmtTime(m)}
               </Text>
-            </Pressable>
+            </PressScale>
           ))}
         </View>
       </Sheet>
@@ -356,25 +491,78 @@ export function Segmented<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
+  const [width, setWidth] = useState(0);
+  const reduced = useReducedMotion();
+  const index = Math.max(
+    0,
+    options.findIndex((o) => o.value === value),
+  );
+  const segW = width > 0 ? (width - 8) / options.length : 0;
+
+  // The pill is absolutely positioned and childless, so moving it never re-lays-out the
+  // labels. Changed tens of times a day, so it stays short: 200ms strong ease-out.
+  const pillStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: reduced
+          ? index * segW
+          : withTiming(index * segW, { duration: 200, easing: EASE_OUT }),
+      },
+    ],
+    width: segW,
+  }));
+
   return (
-    <View className="flex-row gap-1 rounded-xl bg-muted p-1">
-      {options.map((o) => (
-        <Pressable
-          key={o.value}
-          onPress={() => onChange(o.value)}
-          className={`flex-1 items-center rounded-lg px-2 py-2 ${
-            value === o.value ? 'bg-card' : ''
-          }`}
-        >
-          <Text
-            className={`text-xs font-semibold ${
-              value === o.value ? 'text-foreground' : 'text-muted-foreground'
+    <View
+      className="flex-row rounded-xl bg-muted p-1"
+      style={{ borderCurve: 'continuous' }}
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      accessibilityRole="tablist"
+    >
+      {segW > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 4,
+              borderRadius: 8,
+              backgroundColor: C.white,
+              borderCurve: 'continuous',
+            },
+            cardShadow,
+            pillStyle,
+          ]}
+        />
+      ) : null}
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => {
+              if (active) return;
+              tickSelection();
+              onChange(o.value);
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            className={`flex-1 items-center rounded-lg px-2 py-2 ${
+              segW > 0 ? '' : active ? 'bg-card' : ''
             }`}
           >
-            {o.label}
-          </Text>
-        </Pressable>
-      ))}
+            <Text
+              className={`text-xs font-semibold ${
+                active ? 'text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

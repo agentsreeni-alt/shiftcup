@@ -1,9 +1,9 @@
 import { useFocusEffect } from 'expo-router';
 import { Check } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { AppBar, Btn, Card, Screen, TimeField } from '@/components/kit';
+import { AppBar, Btn, Card, PressScale, Screen, TimeField } from '@/components/kit';
 import {
   currentWeekStart,
   loadMyAvailability,
@@ -144,7 +144,7 @@ export default function AvailabilityScreen() {
                 </View>
                 <View className="flex-row gap-1.5">
                   {options.map((o) => (
-                    <Pressable
+                    <PressScale
                       key={o.key}
                       onPress={() => setDay(i, { kind: o.key })}
                       className={`flex-1 items-center rounded-lg py-2 ${
@@ -158,7 +158,7 @@ export default function AvailabilityScreen() {
                       >
                         {o.label}
                       </Text>
-                    </Pressable>
+                    </PressScale>
                   ))}
                 </View>
                 {d.kind === 'window' ? (
