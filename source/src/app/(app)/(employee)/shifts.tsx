@@ -15,7 +15,16 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
-import { DAY_LONG, fmtDayDate, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
+import {
+  DAY_LONG,
+  dateAtMinutes,
+  dateForWeekday,
+  fmtDayDate,
+  fmtRange,
+  fmtTime,
+  fmtWeekLabel,
+} from '@/lib/dates';
+import { leadLabel } from '@/lib/reminders';
 import type { Assignment, CafeSettings, CoverRequest, Reminder } from '@/lib/types';
 
 export default function MyShiftsScreen() {
@@ -44,6 +53,8 @@ export default function MyShiftsScreen() {
       setCovers(c);
       setReminders(r);
       setSettings(s);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Could not load your shifts. Check your connection.');
     } finally {
       setLoading(false);
     }
@@ -88,6 +99,7 @@ export default function MyShiftsScreen() {
         rows.map((a) => {
           const colors = SLOT_COLORS[a.slot];
           const covered = covers.some((c) => c.assignment_id === a.id);
+          const past = dateAtMinutes(dateForWeekday(weekStart, a.weekday), a.end_min) < new Date();
           return (
             <View
               key={a.id ?? `${a.weekday}-${a.start_min}`}
@@ -104,7 +116,11 @@ export default function MyShiftsScreen() {
                   </Text>
                   <Text className="text-sm text-foreground">{fmtRange(a.start_min, a.end_min)}</Text>
                 </View>
-                {covered ? (
+                {past ? (
+                  <Text className="text-[11px] font-semibold uppercase text-muted-foreground">
+                    Done
+                  </Text>
+                ) : covered ? (
                   <Text className="text-[11px] font-bold uppercase text-destructive">
                     Cover asked
                   </Text>
@@ -143,7 +159,8 @@ export default function MyShiftsScreen() {
         <View className="mb-3 flex-row items-center gap-2 rounded-xl bg-card px-4 py-2.5">
           <Bell size={14} color={C.pine} />
           <Text className="flex-1 text-xs text-muted-foreground">
-            We remind you the evening before and one hour before each shift.
+            We remind you the evening before and {leadLabel(settings?.second_reminder_min ?? 60)}{' '}
+            before each shift.
           </Text>
         </View>
       )}
@@ -187,11 +204,7 @@ export default function MyShiftsScreen() {
       <Notice
         tone="info"
         title="Reminders"
-        body={`Evening before at ${fmtTime(settings?.evening_reminder_min ?? 1080)}, and ${
-          (settings?.second_reminder_min ?? 60) >= 60
-            ? `${Math.round((settings?.second_reminder_min ?? 60) / 60)} hour before`
-            : `${settings?.second_reminder_min ?? 60} minutes before`
-        } your shift.`}
+        body={`Evening before at ${fmtTime(settings?.evening_reminder_min ?? 1080)}, and ${leadLabel(settings?.second_reminder_min ?? 60)} before your shift.`}
       />
     </Screen>
   );

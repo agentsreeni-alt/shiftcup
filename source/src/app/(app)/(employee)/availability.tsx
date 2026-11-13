@@ -51,6 +51,8 @@ export default function AvailabilityScreen() {
         };
       }
       setDraft(next);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Could not load your week. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -66,8 +68,18 @@ export default function AvailabilityScreen() {
     setDraft((prev) => prev.map((d, i) => (i === weekday ? { ...d, ...patch } : d)));
   };
 
+  const badDays = draft
+    .map((d, i) => (d.kind === 'window' && d.end <= d.start ? i : -1))
+    .filter((i) => i >= 0);
+
   const submit = async () => {
     if (!employee) return;
+    if (badDays.length > 0) {
+      setMessage(
+        `Check ${badDays.map((i) => DAY_LONG[i]).join(', ')}: the end time must be after the start time.`,
+      );
+      return;
+    }
     setBusy(true);
     setMessage('');
     try {
@@ -171,6 +183,11 @@ export default function AvailabilityScreen() {
                       <TimeField compact value={d.end} onChange={(v) => setDay(i, { end: v })} />
                     </View>
                   </View>
+                ) : null}
+                {badDays.includes(i) ? (
+                  <Text className="mt-1.5 text-xs text-destructive">
+                    End time must be after the start time.
+                  </Text>
                 ) : null}
               </Card>
             );

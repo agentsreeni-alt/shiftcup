@@ -22,6 +22,13 @@ import { useWeekData } from '@/lib/useWeek';
 import { currentWeekStart } from '@/lib/api';
 import { useFocusEffect } from 'expo-router';
 
+const LEAD_OPTIONS = [
+  { min: 30, label: '30 min' },
+  { min: 60, label: '1 hour' },
+  { min: 120, label: '2 hours' },
+  { min: 180, label: '3 hours' },
+];
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { cafe, profile, signOut, refresh, isSample } = useApp();
@@ -179,21 +186,37 @@ export default function SettingsScreen() {
           ))}
         </View>
 
-        <View className="flex-row gap-2">
-          <View className="flex-1">
-            <TimeField
-              label="Evening reminder"
-              value={settings?.evening_reminder_min ?? 1080}
-              onChange={(v) => patchSettings({ evening_reminder_min: v })}
-            />
-          </View>
-          <View className="flex-1">
-            <TimeField
-              label="Before shift"
-              value={settings?.second_reminder_min ?? 60}
-              onChange={(v) => patchSettings({ second_reminder_min: v })}
-            />
-          </View>
+        <TimeField
+          label="Evening reminder (the night before)"
+          value={settings?.evening_reminder_min ?? 1080}
+          onChange={(v) => patchSettings({ evening_reminder_min: v })}
+        />
+
+        <Text className="mb-2 mt-4 text-xs text-muted-foreground">
+          Second reminder, before the shift starts
+        </Text>
+        <View className="flex-row gap-1">
+          {LEAD_OPTIONS.map((o) => {
+            const on = (settings?.second_reminder_min ?? 60) === o.min;
+            return (
+              <PressScale
+                key={o.min}
+                onPress={() => patchSettings({ second_reminder_min: o.min })}
+                accessibilityState={{ selected: on }}
+                className={`flex-1 items-center rounded-lg py-2 ${
+                  on ? 'bg-primary' : 'border border-border bg-card'
+                }`}
+              >
+                <Text
+                  className={`text-xs font-semibold ${
+                    on ? 'text-primary-foreground' : 'text-foreground'
+                  }`}
+                >
+                  {o.label}
+                </Text>
+              </PressScale>
+            );
+          })}
         </View>
 
         <View className="mt-4 flex-row items-center justify-between rounded-xl border border-border px-3 py-2.5">

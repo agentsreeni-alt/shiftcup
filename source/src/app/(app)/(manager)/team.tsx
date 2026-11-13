@@ -61,6 +61,8 @@ export default function TeamScreen() {
     editing: null,
   });
   const [daySheet, setDaySheet] = useState<{ employee: Employee; weekday: number } | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(null);
+  const [nudged, setNudged] = useState<Set<string>>(new Set());
 
   const availabilityByEmployee = useMemo(() => {
     const map = new Map<string, Availability[]>();
@@ -97,7 +99,7 @@ export default function TeamScreen() {
   };
 
   const nudge = async (emp: Employee) => {
-    if (!cafe) return;
+    if (!cafe || nudged.has(emp.id)) return;
     setBusy(true);
     try {
       await nudgeEmployee({
@@ -107,6 +109,7 @@ export default function TeamScreen() {
         body: `Reminder: please send your availability for the week of ${fmtWeekLabel(weekStart)}.`,
         channel: settings.channel,
       });
+      setNudged((prev) => new Set(prev).add(emp.id));
       setMessage(`Nudged ${emp.name}.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not send the nudge.');
@@ -192,24 +195,50 @@ export default function TeamScreen() {
     }
   };
 
-  const bumpRating = async (emp: Employee, delta: number) => {
+  // Quick edits on a team card. Errors are shown instead of failing silently.
+  const quickUpdate = async (
+    emp: Employee,
+    patch: Parameters<typeof updateEmployee>[1],
+  ) => {
+    try {
+      await updateEmployee(emp.id, patch);
+      await data.reload();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : `Could not update ${emp.name}.`);
+    }
+  };
+
+  const bumpRating = (emp: Employee, delta: number) => {
     const next = Math.max(1, Math.min(5, emp.rating + delta));
     if (next === emp.rating) return;
-    await updateEmployee(emp.id, { rating: next });
-    await data.reload();
+    return quickUpdate(emp, { rating: next });
   };
 
-  const toggleRole = async (emp: Employee, role: string) => {
+  const toggleRole = (emp: Employee, role: string) => {
     const has = emp.roles.includes(role);
     const roles = has ? emp.roles.filter((r) => r !== role) : [...emp.roles, role];
-    if (roles.length === 0) return;
-    await updateEmployee(emp.id, { roles });
-    await data.reload();
+    if (roles.length === 0) {
+      setMessage(`${emp.name} needs at least one role.`);
+      return;
+    }
+    return quickUpdate(emp, { roles });
   };
 
-  const toggleSolo = async (emp: Employee) => {
-    await updateEmployee(emp.id, { can_work_alone: !emp.can_work_alone });
-    await data.reload();
+  const toggleSolo = (emp: Employee) => quickUpdate(emp, { can_work_alone: !emp.can_work_alone });
+
+  const confirmDeactivate = async () => {
+    if (!cafe || !deactivateTarget) return;
+    setBusy(true);
+    try {
+      await deactivateEmployee(cafe.id, deactivateTarget.id);
+      await data.reload();
+      setMessage(`${deactivateTarget.name} is deactivated. Their open shifts show as gaps.`);
+      setDeactivateTarget(null);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Could not deactivate.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const waiting = data.employees.filter(
@@ -245,12 +274,28 @@ export default function TeamScreen() {
             {waiting.map((emp) => (
               <View key={emp.id} className="flex-row items-center justify-between">
                 <Text className="text-sm text-foreground">{emp.name}</Text>
-                <Pressable onPress={() => nudge(emp)} className="px-2 py-1 active:opacity-60">
-                  <Text className="text-xs font-semibold text-primary">Nudge</Text>
+                <Pressable
+                  onPress={() => nudge(emp)}
+                  disabled={nudged.has(emp.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Nudge ${emp.name}`}
+                  hitSlop={8}
+                  className="px-2 py-1 active:opacity-60"
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      nudged.has(emp.id) ? 'text-muted-foreground' : 'text-primary'
+                    }`}
+                  >
+                    {nudged.has(emp.id) ? 'Nudged' : 'Nudge'}
+                  </Text>
                 </Pressable>
               </View>
             ))}
           </View>
+        ) : null}
+        {message && !parsed ? (
+          <Text className="mt-3 text-xs text-muted-foreground">{message}</Text>
         ) : null}
       </Card>
 
@@ -326,7 +371,9 @@ export default function TeamScreen() {
         ) : null}
       </Card>
 
-      {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
+      {message && parsed ? (
+        <Text className="mt-2 text-xs text-muted-foreground">{message}</Text>
+      ) : null}
 
       <SectionTitle>Your team</SectionTitle>
       <View className="gap-3">
@@ -359,6 +406,7 @@ export default function TeamScreen() {
                 </View>
                 <View className="flex-row items-center gap-1">
                   <PressScale
+                    accessibilityLabel={`Lower ${emp.name}'s rating`}
                     onPress={() => bumpRating(emp, -1)}
                     className="h-7 w-7 items-center justify-center rounded-full border border-border"
                   >
@@ -366,6 +414,7 @@ export default function TeamScreen() {
                   </PressScale>
                   <Stars value={emp.rating} />
                   <PressScale
+                    accessibilityLabel={`Raise ${emp.name}'s rating`}
                     onPress={() => bumpRating(emp, 1)}
                     className="h-7 w-7 items-center justify-center rounded-full border border-border"
                   >
@@ -450,16 +499,22 @@ export default function TeamScreen() {
                 </PressScale>
                 {emp.active ? (
                   <PressScale
-                    onPress={async () => {
-                      if (!cafe) return;
-                      await deactivateEmployee(cafe.id, emp.id);
-                      await data.reload();
-                    }}
-                    className="flex-1 items-center rounded-lg border border-border py-2 active:opacity-70"
+                    onPress={() => setDeactivateTarget(emp)}
+                    className="flex-1 items-center rounded-lg border border-border py-2"
                   >
                     <Text className="text-xs font-semibold text-destructive">Deactivate</Text>
                   </PressScale>
-                ) : null}
+                ) : (
+                  <PressScale
+                    onPress={async () => {
+                      await quickUpdate(emp, { active: true });
+                      setMessage(`${emp.name} is back on the team.`);
+                    }}
+                    className="flex-1 items-center rounded-lg bg-primary py-2"
+                  >
+                    <Text className="text-xs font-semibold text-primary-foreground">Reactivate</Text>
+                  </PressScale>
+                )}
               </View>
             </Card>
           );
@@ -474,6 +529,21 @@ export default function TeamScreen() {
           onPress={() => setMemberSheet({ open: true, editing: null })}
         />
       </View>
+
+      <Sheet
+        visible={Boolean(deactivateTarget)}
+        onClose={() => setDeactivateTarget(null)}
+        title={`Deactivate ${deactivateTarget?.name ?? ''}?`}
+      >
+        <View className="gap-3 pb-4">
+          <Text className="text-sm text-muted-foreground">
+            They stop getting requests and reminders, and any shifts they have become gaps. You can
+            reactivate them later.
+          </Text>
+          <Btn label="Deactivate" variant="danger" loading={busy} onPress={confirmDeactivate} />
+          <Btn label="Cancel" variant="ghost" onPress={() => setDeactivateTarget(null)} />
+        </View>
+      </Sheet>
 
       <MemberSheet
         open={memberSheet.open}

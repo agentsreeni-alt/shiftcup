@@ -23,10 +23,11 @@ export type ReminderDraft = {
   channel: Channel;
 };
 
-function leadLabel(minutes: number): string {
+export function leadLabel(minutes: number): string {
   if (minutes === 60) return 'one hour';
   if (minutes === 30) return '30 minutes';
   if (minutes === 120) return 'two hours';
+  if (minutes === 180) return 'three hours';
   return `${minutes} minutes`;
 }
 

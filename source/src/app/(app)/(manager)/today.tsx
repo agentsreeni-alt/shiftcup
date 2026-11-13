@@ -224,7 +224,9 @@ export default function TodayScreen() {
           {step === 0
             ? 'Ask your team when they can work this week.'
             : step === 1
-              ? 'Your team answered. Build the draft and ShiftCup fills what it can.'
+              ? waiting.length === 0
+                ? 'Everyone answered. Build the draft and ShiftCup fills what it can.'
+                : `${waiting.length} still ${waiting.length === 1 ? 'has' : 'have'} not answered. You can build the draft now and fill them in later.`
               : step === 2
                 ? `${issueCount} ${issueCount === 1 ? 'thing needs' : 'things need'} a decision before you publish.`
                 : step === 3

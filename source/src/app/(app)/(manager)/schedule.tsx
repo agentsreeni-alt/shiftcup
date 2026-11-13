@@ -21,7 +21,7 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
-import { DAY_LONG, DAY_SHORT, fmtHours, fmtRange, fmtTime, fmtWeekLabel, weekdayOf } from '@/lib/dates';
+import { DAY_LONG, DAY_SHORT, fmtHours, fmtRange, fmtWeekLabel, weekdayOf } from '@/lib/dates';
 import { checkEligibility, fillOpenSlots, weekMinutes } from '@/lib/scheduling';
 import type { Assignment, CafeSettings, SlotKind } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
@@ -59,6 +59,9 @@ export default function ScheduleScreen() {
   const [slotSheet, setSlotSheet] = useState<{ blockId: string; slot: SlotKind } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
+  const [publishWarnOpen, setPublishWarnOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [showAllGaps, setShowAllGaps] = useState(false);
 
   const status = useMemo(() => {
     if (!data.published) return 'Draft';
@@ -121,15 +124,23 @@ export default function ScheduleScreen() {
     }
   };
 
-  const runCopyLastWeek = async () => {
-    if (!cafe || !hasAccess) return;
+  const runCopyLastWeek = async (force = false) => {
+    if (!cafe) return;
+    if (!hasAccess) {
+      router.push('/(app)/billing');
+      return;
+    }
+    if (!force && data.assignments.some((a) => a.employee_id)) {
+      setCopyOpen(true);
+      return;
+    }
+    setCopyOpen(false);
     setBusy(true);
     setMessage('');
     try {
       const prev = await loadAssignments(cafe.id, weekStartFromOffset(offset - 1));
       if (prev.length === 0) {
         setMessage('Last week has no assignments to copy.');
-        setBusy(false);
         return;
       }
       const rows: Assignment[] = prev.map((a) => ({
@@ -161,12 +172,19 @@ export default function ScheduleScreen() {
     }
   };
 
-  const runPublish = async () => {
+  const issueCount = data.gaps.length + data.clashes.length;
+
+  const runPublish = async (force = false) => {
     if (!cafe) return;
     if (!hasAccess) {
       router.push('/(app)/billing');
       return;
     }
+    if (issueCount > 0 && !force) {
+      setPublishWarnOpen(true);
+      return;
+    }
+    setPublishWarnOpen(false);
     setBusy(true);
     setMessage('');
     try {
@@ -272,7 +290,13 @@ export default function ScheduleScreen() {
       <AppBar title="Schedule" subtitle={cafe?.name ?? ''} />
 
       <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card shadow-card px-2 py-2">
-        <Pressable onPress={() => setOffset((o) => o - 1)} className="p-2 active:opacity-60">
+        <Pressable
+          onPress={() => setOffset((o) => o - 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Previous week"
+          hitSlop={8}
+          className="p-2 active:opacity-60"
+        >
           <ChevronLeft size={20} color={C.pine} />
         </Pressable>
         <View className="items-center">
@@ -285,7 +309,13 @@ export default function ScheduleScreen() {
             {status}
           </Text>
         </View>
-        <Pressable onPress={() => setOffset((o) => o + 1)} className="p-2 active:opacity-60">
+        <Pressable
+          onPress={() => setOffset((o) => o + 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Next week"
+          hitSlop={8}
+          className="p-2 active:opacity-60"
+        >
           <ChevronRight size={20} color={C.pine} />
         </Pressable>
       </View>
@@ -301,7 +331,7 @@ export default function ScheduleScreen() {
       <Btn
         label={status === 'Published' ? 'Publish changes' : 'Approve and publish'}
         loading={busy}
-        onPress={runPublish}
+        onPress={() => runPublish()}
         disabled={data.assignments.length === 0}
       />
 
@@ -310,7 +340,7 @@ export default function ScheduleScreen() {
       {data.gaps.length > 0 ? (
         <View className="mt-4 gap-2">
           <SectionTitle>Gaps</SectionTitle>
-          {data.gaps.map((g) => (
+          {(showAllGaps ? data.gaps : data.gaps.slice(0, 3)).map((g) => (
             <View key={g.key} className="rounded-2xl border border-destructive/30 bg-card p-3">
               <View className="flex-row items-start gap-2">
                 <AlertTriangle size={15} color={C.red} />
@@ -335,13 +365,22 @@ export default function ScheduleScreen() {
                     setDay(g.weekday);
                     setSlotSheet({ blockId: g.blockId, slot: g.slot });
                   }}
-                  className="rounded-lg bg-primary px-3 py-1.5 active:opacity-70"
+                  accessibilityLabel={`Fix ${g.label}`}
+                  className="rounded-lg bg-primary px-3 py-1.5"
                 >
                   <Text className="text-xs font-semibold text-primary-foreground">Fix</Text>
                 </PressScale>
               </View>
             </View>
           ))}
+          {data.gaps.length > 3 ? (
+            <Btn
+              label={showAllGaps ? 'Show fewer' : `Show all ${data.gaps.length} gaps`}
+              variant="ghost"
+              size="sm"
+              onPress={() => setShowAllGaps((v) => !v)}
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -507,7 +546,7 @@ export default function ScheduleScreen() {
               variant="ghost"
               size="sm"
               icon={<Copy size={14} color={C.pine} />}
-              onPress={runCopyLastWeek}
+              onPress={() => runCopyLastWeek()}
             />
           </View>
           <View className="flex-1">
@@ -564,6 +603,17 @@ export default function ScheduleScreen() {
         }
       >
         <View className="gap-2 pb-4">
+          {sheetRows.length > 0 && !sheetRows.some((r) => r.ok || r.overLimit) ? (
+            <Notice
+              tone="info"
+              title="Nobody can take this slot yet"
+              body={
+                slotSheet?.slot === 'solo'
+                  ? 'Only people marked “Can work alone” can cover a solo block. Turn that on for someone in Team, change this block to two people in Settings, or ask your team for more availability.'
+                  : 'Ask your team for more availability, or change their roles in Team.'
+              }
+            />
+          ) : null}
           {sheetRows.map((row) => (
             <View
               key={row.emp.id}
@@ -582,7 +632,7 @@ export default function ScheduleScreen() {
                     </Text>
                   </View>
                   {!row.ok && row.reason ? (
-                    <Text className="mt-1 text-xs text-destructive">{row.reason}</Text>
+                    <Text className="mt-1 text-xs text-destructive">{reasonText(row.reason)}</Text>
                   ) : null}
                 </View>
                 {row.ok ? (
@@ -611,6 +661,34 @@ export default function ScheduleScreen() {
         <Text selectable className="pb-6 text-sm leading-6 text-foreground">
           {shareText}
         </Text>
+      </Sheet>
+
+      <Sheet
+        visible={publishWarnOpen}
+        onClose={() => setPublishWarnOpen(false)}
+        title="Publish with open slots?"
+      >
+        <View className="gap-3 pb-4">
+          <Text className="text-sm text-muted-foreground">
+            {data.gaps.length} {data.gaps.length === 1 ? 'slot is' : 'slots are'} still open
+            {data.clashes.length > 0
+              ? ` and ${data.clashes.length} ${data.clashes.length === 1 ? 'person no longer fits their shift' : 'people no longer fit their shifts'}`
+              : ''}
+            . Your team will see the week as it is now.
+          </Text>
+          <Btn label="Publish anyway" loading={busy} onPress={() => runPublish(true)} />
+          <Btn label="Fix them first" variant="ghost" onPress={() => setPublishWarnOpen(false)} />
+        </View>
+      </Sheet>
+
+      <Sheet visible={copyOpen} onClose={() => setCopyOpen(false)} title="Replace this week?">
+        <View className="gap-3 pb-4">
+          <Text className="text-sm text-muted-foreground">
+            {fmtWeekLabel(weekStart)} already has shifts. Copying last week replaces all of them.
+          </Text>
+          <Btn label="Yes, copy last week" loading={busy} onPress={() => runCopyLastWeek(true)} />
+          <Btn label="Keep this week" variant="ghost" onPress={() => setCopyOpen(false)} />
+        </View>
       </Sheet>
 
       <Sheet visible={clearOpen} onClose={() => setClearOpen(false)} title="Clear this week?">
@@ -674,9 +752,14 @@ function SlotBody({
         </View>
       ) : (
         <Text style={{ color: ink }} className="text-xs font-semibold">
-          {fmtTime(0).length > 0 ? 'Tap to fill' : ''}
+          Tap to fill
         </Text>
       )}
     </View>
   );
+}
+
+function reasonText(reason: string): string {
+  const text = reason.replace(/^Cannot: /, '');
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

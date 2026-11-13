@@ -52,6 +52,7 @@ export function PressScale({
     <Pressable
       disabled={disabled}
       pressRetentionOffset={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      accessibilityRole="button"
       {...props}
       onPressIn={(e) => {
         setPressed(true);
