@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Screen } from '@/components/kit';
 import { C } from '@/lib/colors';
 
-const SUPPORT_EMAIL = 'support@shiftcup.app';
+const SUPPORT_EMAIL = 'info@gotradeexim.com';
 
 const CONTENT: Record<string, { title: string; body: string[] }> = {
   privacy: {
