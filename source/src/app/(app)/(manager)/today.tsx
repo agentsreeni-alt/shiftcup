@@ -1,10 +1,27 @@
 import { useRouter } from 'expo-router';
-import { AlertTriangle, ArrowRight, Bell, CalendarCheck, Clock, Users } from 'lucide-react-native';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bell,
+  CalendarCheck,
+  CheckCircle2,
+  Clock,
+  Users,
+} from 'lucide-react-native';
 import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 import { ChangeRequests } from '@/components/ChangeRequests';
-import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle } from '@/components/kit';
+import {
+  AppBar,
+  Btn,
+  Card,
+  Notice,
+  PressScale,
+  Screen,
+  SectionTitle,
+  toast,
+} from '@/components/kit';
 import { planningWeekStart, publishWeek, saveAssignments, sendWeeklyRequest } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { isReachable } from '@/lib/invite';
@@ -55,6 +72,10 @@ export default function TodayScreen() {
         ]),
     ).values(),
   ];
+  // Before a draft exists every slot is open; that is the next step, not a problem.
+  const openSlots = data.assignments.some((a) => a.employee_id) ? data.gaps.length : 0;
+  const attentionCount =
+    coverDays.length + waiting.length + openSlots + data.clashes.length;
   const filledCount = data.assignments.filter((a) => a.employee_id).length;
   const hasRequest = Boolean(data.request);
   // People with a usual week can be scheduled without asking them first.
@@ -206,7 +227,7 @@ export default function TodayScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={data.reload}>
       <AppBar
         title={cafeName || 'Your café'}
         subtitle={`Planning next week · ${fmtWeekLabel(weekStart)}`}
@@ -326,7 +347,7 @@ export default function TodayScreen() {
             channel={settings.channel}
             onDecided={async (text) => {
               await data.reload();
-              setMessage(text);
+              toast(text);
             }}
           />
         </>
@@ -334,60 +355,68 @@ export default function TodayScreen() {
 
       <SectionTitle>Needs attention</SectionTitle>
       <View className="gap-2">
-        <AttentionRow
-          icon={<Bell size={16} color={C.red} />}
-          title="Cover requests"
-          value={coverDays.length}
-          detail={
-            coverDays.length === 0
-              ? 'Nobody has asked for cover.'
-              : coverDays.map((c) => `${c.name} (${DAY_SHORT[c.weekday]})`).join(', ')
-          }
-          onPress={() => router.push('/(app)/(manager)/schedule')}
-        />
-        <AttentionRow
-          icon={<Users size={16} color={C.pine} />}
-          title={hasRequest ? 'Have not answered' : 'No availability yet'}
-          value={waiting.length}
-          detail={
-            waiting.length === 0
-              ? hasRequest
-                ? 'Everyone has replied.'
-                : 'Everyone has a usual week.'
-              : hasRequest
+        {attentionCount === 0 ? (
+          <View className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5">
+            <View
+              className="h-9 w-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: C.solo }}
+            >
+              <CheckCircle2 size={17} color={C.soloInk} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-foreground">All clear</Text>
+              <Text className="text-xs text-muted-foreground">
+                Nothing is waiting on you for next week.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+        {coverDays.length > 0 ? (
+          <AttentionRow
+            icon={<Bell size={16} color={C.red} />}
+            title={coverDays.length === 1 ? 'Someone can’t make a shift' : 'People can’t make shifts'}
+            value={coverDays.length}
+            detail={coverDays.map((c) => `${c.name} (${DAY_SHORT[c.weekday]})`).join(', ')}
+            onPress={() => router.push('/(app)/(manager)/schedule')}
+          />
+        ) : null}
+        {waiting.length > 0 ? (
+          <AttentionRow
+            icon={<Users size={16} color={C.red} />}
+            title={hasRequest ? 'Have not answered' : 'No usual week yet'}
+            value={waiting.length}
+            detail={
+              hasRequest
                 ? waiting.map((e) => e.name).join(', ')
-                : `Set a usual week for ${waiting.map((e) => e.name).join(', ')} in Team.`
-          }
-          onPress={() => router.push('/(app)/(manager)/team')}
-        />
-        <AttentionRow
-          icon={<AlertTriangle size={16} color={C.red} />}
-          title="Gaps"
-          value={data.gaps.length}
-          detail={
-            data.gaps.length === 0
-              ? 'Every slot is covered.'
-              : data.gaps
-                  .slice(0, 3)
-                  .map((g) => g.label)
-                  .join(' · ')
-          }
-          onPress={() => router.push('/(app)/(manager)/schedule')}
-        />
-        <AttentionRow
-          icon={<AlertTriangle size={16} color={C.red} />}
-          title="Clashes"
-          value={data.clashes.length}
-          detail={
-            data.clashes.length === 0
-              ? 'Nobody lost their eligibility.'
-              : data.clashes
-                  .slice(0, 3)
-                  .map((c) => `${c.employeeName}: ${c.reason}`)
-                  .join(' · ')
-          }
-          onPress={() => router.push('/(app)/(manager)/schedule')}
-        />
+                : `Set one for ${waiting.map((e) => e.name).join(', ')} in Team.`
+            }
+            onPress={() => router.push('/(app)/(manager)/team')}
+          />
+        ) : null}
+        {openSlots > 0 ? (
+          <AttentionRow
+            icon={<AlertTriangle size={16} color={C.red} />}
+            title="Open slots"
+            value={openSlots}
+            detail={data.gaps
+              .slice(0, 3)
+              .map((g) => g.label)
+              .join(', ')}
+            onPress={() => router.push('/(app)/(manager)/schedule')}
+          />
+        ) : null}
+        {data.clashes.length > 0 ? (
+          <AttentionRow
+            icon={<AlertTriangle size={16} color={C.red} />}
+            title="No longer fit their shift"
+            value={data.clashes.length}
+            detail={data.clashes
+              .slice(0, 3)
+              .map((c) => `${c.employeeName}: ${c.reason}`)
+              .join(', ')}
+            onPress={() => router.push('/(app)/(manager)/schedule')}
+          />
+        ) : null}
       </View>
 
       <SectionTitle>Next week at a glance</SectionTitle>

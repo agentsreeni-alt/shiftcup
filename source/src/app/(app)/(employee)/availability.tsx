@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { ArrowLeft, CalendarClock, Check, Clock, Hourglass } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
@@ -13,6 +13,7 @@ import {
   Screen,
   SectionTitle,
   TimeField,
+  toast,
 } from '@/components/kit';
 import {
   cancelAvailabilityRequest,
@@ -81,6 +82,10 @@ export default function AvailabilityScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  // Confirmations float above the tab bar, so they are seen wherever the page is scrolled.
+  useEffect(() => {
+    if (message) toast(message);
+  }, [message]);
   const [error, setError] = useState('');
 
   const [editing, setEditing] = useState<{ scope: ChangeScope; weekStart: string } | null>(null);
@@ -393,7 +398,7 @@ export default function AvailabilityScreen() {
   );
 
   return (
-    <Screen>
+    <Screen onRefresh={load}>
       <AppBar title="Availability" subtitle={cafeName ?? ''} />
 
       {askId && !askAnswered ? (

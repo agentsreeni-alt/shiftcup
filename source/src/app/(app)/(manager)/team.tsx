@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Check, Minus, Plus, Send, Share2, Sparkles, UserPlus } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
@@ -16,6 +16,7 @@ import {
   Sheet,
   Stars,
   TimeField,
+  toast,
 } from '@/components/kit';
 import {
   addEmployee,
@@ -74,6 +75,10 @@ export default function TeamScreen() {
 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  // Confirmations float above the tab bar, so they are seen wherever the page is scrolled.
+  useEffect(() => {
+    if (message) toast(message);
+  }, [message]);
   const [paste, setPaste] = useState('');
   const [parsed, setParsed] = useState<Parsed | null>(null);
   // Who the pasted message belongs to. Pre-filled only when the reader found a name in it.
@@ -329,153 +334,17 @@ export default function TeamScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={data.reload}>
       <AppBar title="Team" subtitle={`${data.employees.filter((e) => e.active).length} active`} />
 
-      <Card>
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1">
-            <Text className="text-base font-semibold text-foreground">Availability request</Text>
-            <Text className="mt-0.5 text-xs text-muted-foreground">
-              {data.request
-                ? `Sent for ${fmtWeekLabel(weekStart)} · ${waiting.length} still waiting`
-                : 'Not sent yet for this week.'}
-            </Text>
-          </View>
-          <PressScale
-            onPress={sendRequest}
-            className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
-          >
-            <Send size={13} color={C.cream} />
-            <Text className="text-xs font-semibold text-primary-foreground">
-              {data.request ? 'Resend' : 'Send request'}
-            </Text>
-          </PressScale>
-        </View>
-        {waiting.length > 0 ? (
-          <View className="mt-3 gap-1.5">
-            {waiting.map((emp) => (
-              <View key={emp.id} className="flex-row items-center justify-between">
-                <Text className="text-sm text-foreground">{emp.name}</Text>
-                {!isReachable(emp) ? (
-                  <Pressable
-                    onPress={() => invite(emp)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Share ${emp.name}'s invite`}
-                    hitSlop={8}
-                    className="px-2 py-1 active:opacity-60"
-                  >
-                    <Text className="text-xs font-semibold text-primary">
-                      Not joined · Share invite
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    onPress={() => nudge(emp)}
-                    disabled={nudged.has(emp.id)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Nudge ${emp.name}`}
-                    hitSlop={8}
-                    className="px-2 py-1 active:opacity-60"
-                  >
-                    <Text
-                      className={`text-xs font-semibold ${
-                        nudged.has(emp.id) ? 'text-muted-foreground' : 'text-primary'
-                      }`}
-                    >
-                      {nudged.has(emp.id) ? 'Nudged' : 'Nudge'}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            ))}
-          </View>
-        ) : null}
-        {message && !parsed ? (
-          <Text className="mt-3 text-xs text-muted-foreground">{message}</Text>
-        ) : null}
-      </Card>
-
-      <SectionTitle>Read a text message</SectionTitle>
-      <Card>
-        <Text className="mb-2 text-xs text-muted-foreground">
-          Paste what someone sent you. ShiftCup reads it and shows you the days before saving.
-        </Text>
-        <TextInput
-          value={paste}
-          onChangeText={setPaste}
-          multiline
-          placeholder="Friday after 5, until 8. Saturday anytime."
-          placeholderTextColor={C.muted}
-          className="min-h-[80px] rounded-xl border border-input bg-card px-3 py-2.5 text-sm text-foreground"
+      <View className="mb-4">
+        <Btn
+          label="Add a team member"
+          variant="secondary"
+          icon={<UserPlus size={16} color={C.pine} />}
+          onPress={() => setMemberSheet({ open: true, editing: null })}
         />
-        <View className="mt-2">
-          <Btn
-            label="Read this message"
-            size="sm"
-            variant="secondary"
-            loading={parsing}
-            icon={<Sparkles size={14} color={C.pine} />}
-            onPress={runParse}
-          />
-        </View>
-
-        {parsed ? (
-          <View className="mt-3 rounded-xl border border-border bg-muted p-3">
-            <Text
-              className="text-xs font-semibold uppercase text-muted-foreground"
-              style={{ letterSpacing: 0.6 }}
-            >
-              {parsedFor ? 'From' : 'Who sent this?'}
-            </Text>
-            <View className="mt-1.5 flex-row flex-wrap gap-1.5">
-              {data.employees
-                .filter((e) => e.active)
-                .map((e) => (
-                  <Pill
-                    key={e.id}
-                    label={e.name}
-                    tone={parsedFor === e.id ? 'pine' : 'outline'}
-                    onPress={() => setParsedFor(e.id)}
-                  />
-                ))}
-            </View>
-            <View className="mt-3 flex-row flex-wrap gap-1.5">
-              {parsed.days.map((d) => (
-                <View key={d.weekday} className="rounded-full bg-card px-2.5 py-1">
-                  <Text className="text-[11px] font-semibold text-foreground">
-                    {DAY_SHORT[d.weekday]}{' '}
-                    {d.kind === 'any'
-                      ? 'any time'
-                      : d.kind === 'none'
-                        ? 'not available'
-                        : fmtRange(d.start_min, d.end_min)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            {parsed.unclear ? (
-              <Text className="mt-2 text-xs text-destructive">{parsed.unclear}</Text>
-            ) : null}
-            <View className="mt-3">
-              <Btn
-                label={parsedFor ? 'Looks right, save it' : 'Pick who sent this first'}
-                size="sm"
-                loading={busy}
-                disabled={!parsedFor}
-                icon={<Check size={14} color={C.cream} />}
-                onPress={saveParsed}
-              />
-            </View>
-          </View>
-        ) : null}
-      </Card>
-
-      {message && parsed ? (
-        <Text className="mt-2 text-xs text-muted-foreground">{message}</Text>
-      ) : null}
-
-      <SectionTitle>Your team</SectionTitle>
+      </View>
       <View className="gap-3">
         {data.employees.map((emp) => {
           const days = availabilityByEmployee.get(emp.id) ?? [];
@@ -643,9 +512,10 @@ export default function TeamScreen() {
                 {emp.active ? (
                   <PressScale
                     onPress={() => setDeactivateTarget(emp)}
-                    className="flex-1 items-center rounded-lg border border-border py-2"
+                    hitSlop={8}
+                    className="items-center justify-center px-3 py-2"
                   >
-                    <Text className="text-xs font-semibold text-destructive">Deactivate</Text>
+                    <Text className="text-xs font-medium text-muted-foreground">Deactivate</Text>
                   </PressScale>
                 ) : (
                   <PressScale
@@ -666,14 +536,151 @@ export default function TeamScreen() {
         })}
       </View>
 
-      <View className="mt-4">
-        <Btn
-          label="Add a team member"
-          variant="secondary"
-          icon={<UserPlus size={16} color={C.pine} />}
-          onPress={() => setMemberSheet({ open: true, editing: null })}
+
+      <SectionTitle>Tools</SectionTitle>
+      <Card>
+        <View className="flex-row items-center justify-between gap-3">
+          <View className="flex-1">
+            <Text className="text-base font-semibold text-foreground">Ask about next week</Text>
+            <Text className="mt-0.5 text-xs text-muted-foreground">
+              {data.request
+                ? `Sent for ${fmtWeekLabel(weekStart)} · ${waiting.length} still waiting`
+                : 'Optional. Drafts use everyone’s usual week; ask only when a week is unusual, like a holiday.'}
+            </Text>
+          </View>
+          <PressScale
+            onPress={sendRequest}
+            className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
+          >
+            <Send size={13} color={C.cream} />
+            <Text className="text-xs font-semibold text-primary-foreground">
+              {data.request ? 'Resend' : 'Ask everyone'}
+            </Text>
+          </PressScale>
+        </View>
+        {waiting.length > 0 ? (
+          <View className="mt-3 gap-1.5">
+            {waiting.map((emp) => (
+              <View key={emp.id} className="flex-row items-center justify-between">
+                <Text className="text-sm text-foreground">{emp.name}</Text>
+                {!isReachable(emp) ? (
+                  <Pressable
+                    onPress={() => invite(emp)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Share ${emp.name}'s invite`}
+                    hitSlop={8}
+                    className="px-2 py-1 active:opacity-60"
+                  >
+                    <Text className="text-xs font-semibold text-primary">
+                      Not joined · Share invite
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => nudge(emp)}
+                    disabled={nudged.has(emp.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Nudge ${emp.name}`}
+                    hitSlop={8}
+                    className="px-2 py-1 active:opacity-60"
+                  >
+                    <Text
+                      className={`text-xs font-semibold ${
+                        nudged.has(emp.id) ? 'text-muted-foreground' : 'text-primary'
+                      }`}
+                    >
+                      {nudged.has(emp.id) ? 'Nudged' : 'Nudge'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {message && !parsed ? (
+          <Text className="mt-3 text-xs text-muted-foreground">{message}</Text>
+        ) : null}
+      </Card>
+
+      <SectionTitle>Read a text message</SectionTitle>
+      <Card>
+        <Text className="mb-2 text-xs text-muted-foreground">
+          Paste what someone sent you. ShiftCup reads it and shows you the days before saving.
+        </Text>
+        <TextInput
+          value={paste}
+          onChangeText={setPaste}
+          multiline
+          placeholder="Friday after 5, until 8. Saturday anytime."
+          placeholderTextColor={C.muted}
+          className="min-h-[80px] rounded-xl border border-input bg-card px-3 py-2.5 text-sm text-foreground"
         />
-      </View>
+        <View className="mt-2">
+          <Btn
+            label="Read this message"
+            size="sm"
+            variant="secondary"
+            loading={parsing}
+            icon={<Sparkles size={14} color={C.pine} />}
+            onPress={runParse}
+          />
+        </View>
+
+        {parsed ? (
+          <View className="mt-3 rounded-xl border border-border bg-muted p-3">
+            <Text
+              className="text-xs font-semibold uppercase text-muted-foreground"
+              style={{ letterSpacing: 0.6 }}
+            >
+              {parsedFor ? 'From' : 'Who sent this?'}
+            </Text>
+            <View className="mt-1.5 flex-row flex-wrap gap-1.5">
+              {data.employees
+                .filter((e) => e.active)
+                .map((e) => (
+                  <Pill
+                    key={e.id}
+                    label={e.name}
+                    tone={parsedFor === e.id ? 'pine' : 'outline'}
+                    onPress={() => setParsedFor(e.id)}
+                  />
+                ))}
+            </View>
+            <View className="mt-3 flex-row flex-wrap gap-1.5">
+              {parsed.days.map((d) => (
+                <View key={d.weekday} className="rounded-full bg-card px-2.5 py-1">
+                  <Text className="text-[11px] font-semibold text-foreground">
+                    {DAY_SHORT[d.weekday]}{' '}
+                    {d.kind === 'any'
+                      ? 'any time'
+                      : d.kind === 'none'
+                        ? 'not available'
+                        : fmtRange(d.start_min, d.end_min)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {parsed.unclear ? (
+              <Text className="mt-2 text-xs text-destructive">{parsed.unclear}</Text>
+            ) : null}
+            <View className="mt-3">
+              <Btn
+                label={parsedFor ? 'Looks right, save it' : 'Pick who sent this first'}
+                size="sm"
+                loading={busy}
+                disabled={!parsedFor}
+                icon={<Check size={14} color={C.cream} />}
+                onPress={saveParsed}
+              />
+            </View>
+          </View>
+        ) : null}
+      </Card>
+
+      {message && parsed ? (
+        <Text className="mt-2 text-xs text-muted-foreground">{message}</Text>
+      ) : null}
+
 
       <Sheet
         visible={Boolean(deactivateTarget)}

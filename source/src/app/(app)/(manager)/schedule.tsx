@@ -10,7 +10,7 @@ import {
   Sparkles,
   Wand2,
 } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import {
@@ -24,6 +24,7 @@ import {
   Segmented,
   Sheet,
   Stars,
+  toast,
 } from '@/components/kit';
 import {
   loadAssignments,
@@ -83,6 +84,10 @@ export default function ScheduleScreen() {
   const [view, setView] = useState<'week' | 'day'>('week');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  // Confirmations float above the tab bar, so they are seen wherever the page is scrolled.
+  useEffect(() => {
+    if (message) toast(message);
+  }, [message]);
   const [slotSheet, setSlotSheet] = useState<{ blockId: string; slot: SlotKind } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
@@ -403,7 +408,7 @@ export default function ScheduleScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={data.reload}>
       <AppBar title="Schedule" subtitle={cafe?.name ?? ''} />
 
       <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card shadow-card px-2 py-2">
