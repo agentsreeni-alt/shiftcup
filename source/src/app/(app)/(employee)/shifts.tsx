@@ -12,8 +12,10 @@ import {
   PressScale,
   Screen,
   SectionTitle,
+  Segmented,
   Sheet,
 } from '@/components/kit';
+import { WeekGrid } from '@/components/WeekGrid';
 import {
   loadMyRequestStatus,
   planningWeekStart,
@@ -21,6 +23,8 @@ import {
   currentWeekStart,
   loadMyAssignments,
   loadMyCoverRequests,
+  loadMyPublishedWeek,
+  loadMyTeam,
   loadMyReminders,
   loadMySettings,
   weekStartFromOffset,
@@ -40,7 +44,36 @@ import {
   fmtWeekLabel,
 } from '@/lib/dates';
 import { leadLabel } from '@/lib/reminders';
-import type { Assignment, CafeSettings, CoverRequest, Reminder } from '@/lib/types';
+import type { EngineAssignment } from '@/lib/scheduling';
+import type {
+  Assignment,
+  CafeSettings,
+  CoverRequest,
+  PublishedSchedule,
+  Reminder,
+} from '@/lib/types';
+
+/** The published week as the grid needs it. Drafts are never shown to employees. */
+function fromSnapshot(pub: PublishedSchedule | null): EngineAssignment[] | null {
+  if (!pub || !Array.isArray(pub.snapshot)) return null;
+  return (
+    pub.snapshot as {
+      weekday: number;
+      block_id: string;
+      slot: Assignment['slot'];
+      employee_id: string | null;
+      start_min: number;
+      end_min: number;
+    }[]
+  ).map((a) => ({
+    blockId: a.block_id,
+    weekday: a.weekday,
+    slot: a.slot,
+    employeeId: a.employee_id,
+    startMin: a.start_min,
+    endMin: a.end_min,
+  }));
+}
 
 /** Back-to-back blocks on the same day and role, shown as one shift. */
 type Shift = {
@@ -95,6 +128,10 @@ export default function MyShiftsScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [needsAvailability, setNeedsAvailability] = useState(false);
+  const [tab, setTab] = useState<'mine' | 'team'>('mine');
+  const [team, setTeam] = useState<{ id: string; name: string }[]>([]);
+  const [teamThis, setTeamThis] = useState<EngineAssignment[] | null>(null);
+  const [teamNext, setTeamNext] = useState<EngineAssignment[] | null>(null);
   const router = useRouter();
 
   const load = useCallback(async () => {
@@ -113,6 +150,19 @@ export default function MyShiftsScreen() {
       setCovers(c);
       setReminders(r);
       setSettings(s);
+      // The team view is a bonus: if it fails, My shifts still works.
+      try {
+        const [people, pubThis, pubNext] = await Promise.all([
+          loadMyTeam(),
+          loadMyPublishedWeek(currentWeekStart()),
+          loadMyPublishedWeek(weekStartFromOffset(1)),
+        ]);
+        setTeam(people);
+        setTeamThis(fromSnapshot(pubThis));
+        setTeamNext(fromSnapshot(pubNext));
+      } catch {
+        setTeam([]);
+      }
     } catch (e) {
       setMessage(
         e instanceof Error ? e.message : 'Could not load your shifts. Check your connection.',
@@ -256,7 +306,51 @@ export default function MyShiftsScreen() {
 
       {message ? <Text className="mb-3 text-xs text-muted-foreground">{message}</Text> : null}
 
-      {loading ? (
+      <View className="mb-4">
+        <Segmented
+          options={[
+            { value: 'mine', label: 'My shifts' },
+            { value: 'team', label: 'Whole team' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </View>
+
+      {tab === 'team' ? (
+        <View className="gap-5">
+          {[
+            {
+              label: `This week · ${fmtWeekLabel(currentWeekStart())}`,
+              week: currentWeekStart(),
+              rows: teamThis,
+            },
+            {
+              label: `Next week · ${fmtWeekLabel(weekStartFromOffset(1))}`,
+              week: weekStartFromOffset(1),
+              rows: teamNext,
+            },
+          ].map((w) => (
+            <View key={w.week} className="gap-2">
+              <SectionTitle>{w.label}</SectionTitle>
+              {w.rows ? (
+                <WeekGrid
+                  weekStart={w.week}
+                  people={team}
+                  assignments={w.rows}
+                  highlightId={employee?.id}
+                  hideEmpty
+                />
+              ) : (
+                <Text className="text-sm text-muted-foreground">
+                  Not published yet. Your manager publishes on{' '}
+                  {DAY_LONG[settings?.publish_weekday ?? 4]}.
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      ) : loading ? (
         <Text className="text-sm text-muted-foreground">Loading your week…</Text>
       ) : thisWeek.length === 0 && nextWeek.length === 0 ? (
         <EmptyState

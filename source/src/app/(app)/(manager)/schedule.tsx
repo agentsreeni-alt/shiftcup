@@ -20,6 +20,7 @@ import {
   PressScale,
   Screen,
   SectionTitle,
+  Segmented,
   Sheet,
   Stars,
 } from '@/components/kit';
@@ -42,6 +43,7 @@ import {
   type Employee,
   type SlotKind,
 } from '@/lib/types';
+import { WeekGrid } from '@/components/WeekGrid';
 import { useWeekData } from '@/lib/useWeek';
 import { changedSincePublish } from '@/lib/utils';
 
@@ -67,6 +69,7 @@ export default function ScheduleScreen() {
 
   const todayWeekday = weekdayOf(new Date());
   const [day, setDay] = useState(offset === 0 ? todayWeekday : 0);
+  const [view, setView] = useState<'week' | 'day'>('week');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [slotSheet, setSlotSheet] = useState<{ blockId: string; slot: SlotKind } | null>(null);
@@ -493,120 +496,154 @@ export default function ScheduleScreen() {
         </View>
       ) : null}
 
-      <SectionTitle>Pick a day</SectionTitle>
-      <View className="flex-row gap-1.5">
-        {DAY_SHORT.map((d, i) => (
-          <PressScale
-            key={d}
-            onPress={() => setDay(i)}
-            className={`flex-1 items-center rounded-xl py-2.5 ${
-              day === i ? 'border border-primary bg-primary' : 'border border-border bg-card'
-            }`}
-          >
-            <Text
-              className={`text-xs font-semibold ${
-                day === i ? 'text-primary-foreground' : 'text-foreground'
-              }`}
-            >
-              {d}
-            </Text>
-          </PressScale>
-        ))}
+      <View className="mt-5">
+        <Segmented
+          options={[
+            { value: 'week', label: 'Whole week' },
+            { value: 'day', label: 'Edit by day' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
       </View>
 
-      <View className="mt-4 gap-3">
-        {dayBlocks.length === 0 ? (
-          <Notice
-            tone="info"
-            title="No coverage blocks for this day"
-            body="Add blocks in Settings so ShiftCup knows when you need people."
+      {view === 'week' ? (
+        <View className="mt-3 gap-2">
+          <WeekGrid
+            weekStart={weekStart}
+            people={data.employees.filter((e) => e.active)}
+            assignments={data.engine.assignments}
+            showHours
+            openPerDay={[0, 1, 2, 3, 4, 5, 6].map(
+              (w) => data.gaps.filter((g) => g.weekday === w).length,
+            )}
+            onCellPress={(_, weekday) => {
+              setDay(weekday);
+              setView('day');
+            }}
           />
-        ) : null}
-        {dayBlocks.map((block) => {
-          const slots: SlotKind[] = block.rule === 'two' ? ['barista', 'scooper'] : ['solo'];
-          return (
-            <Card key={block.id}>
-              <View className="mb-2 flex-row items-center justify-between">
-                <Text className="text-sm font-bold text-foreground">
-                  {fmtRange(block.start_min, block.end_min)}
+          <Text className="text-xs text-muted-foreground">Tap any cell to edit that day.</Text>
+        </View>
+      ) : (
+        <>
+          <SectionTitle>Pick a day</SectionTitle>
+          <View className="flex-row gap-1.5">
+            {DAY_SHORT.map((d, i) => (
+              <PressScale
+                key={d}
+                onPress={() => setDay(i)}
+                className={`flex-1 items-center rounded-xl py-2.5 ${
+                  day === i ? 'border border-primary bg-primary' : 'border border-border bg-card'
+                }`}
+              >
+                <Text
+                  className={`text-xs font-semibold ${
+                    day === i ? 'text-primary-foreground' : 'text-foreground'
+                  }`}
+                >
+                  {d}
                 </Text>
-                <Text className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {block.rule === 'two' ? 'Two people' : 'Solo allowed'}
-                </Text>
-              </View>
-              <View className="gap-2">
-                {slots.map((slot) => {
-                  const assignment = data.assignments.find(
-                    (a) => a.block_id === block.id && a.slot === slot,
-                  );
-                  const emp = assignment?.employee_id
-                    ? data.employees.find((e) => e.id === assignment.employee_id)
-                    : null;
-                  const colors = SLOT_COLORS[slot];
-                  const isOpen = !emp?.active;
-                  const hasCover = data.coverRequests.some(
-                    (c) => c.assignment_id === assignment?.id,
-                  );
-                  const gap = isOpen || hasCover;
-                  return (
-                    <Pressable
-                      key={slot}
-                      onPress={() => setSlotSheet({ blockId: block.id, slot })}
-                      className="active:opacity-80"
-                    >
-                      {gap ? (
-                        <View
-                          style={{
-                            borderStyle: 'dashed',
-                            borderWidth: 1.5,
-                            borderColor: C.red,
-                            borderRadius: 14,
-                            padding: 12,
-                            backgroundColor: C.white,
-                          }}
+              </PressScale>
+            ))}
+          </View>
+
+          <View className="mt-4 gap-3">
+            {dayBlocks.length === 0 ? (
+              <Notice
+                tone="info"
+                title="No coverage blocks for this day"
+                body="Add blocks in Settings so ShiftCup knows when you need people."
+              />
+            ) : null}
+            {dayBlocks.map((block) => {
+              const slots: SlotKind[] = block.rule === 'two' ? ['barista', 'scooper'] : ['solo'];
+              return (
+                <Card key={block.id}>
+                  <View className="mb-2 flex-row items-center justify-between">
+                    <Text className="text-sm font-bold text-foreground">
+                      {fmtRange(block.start_min, block.end_min)}
+                    </Text>
+                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {block.rule === 'two' ? 'Two people' : 'Solo allowed'}
+                    </Text>
+                  </View>
+                  <View className="gap-2">
+                    {slots.map((slot) => {
+                      const assignment = data.assignments.find(
+                        (a) => a.block_id === block.id && a.slot === slot,
+                      );
+                      const emp = assignment?.employee_id
+                        ? data.employees.find((e) => e.id === assignment.employee_id)
+                        : null;
+                      const colors = SLOT_COLORS[slot];
+                      const isOpen = !emp?.active;
+                      const hasCover = data.coverRequests.some(
+                        (c) => c.assignment_id === assignment?.id,
+                      );
+                      const gap = isOpen || hasCover;
+                      return (
+                        <Pressable
+                          key={slot}
+                          onPress={() => setSlotSheet({ blockId: block.id, slot })}
+                          className="active:opacity-80"
                         >
-                          <SlotBody
-                            slot={slot}
-                            name={emp?.name}
-                            rating={emp?.rating}
-                            hours={emp ? weekMinutes(data.engine.assignments, emp.id) : undefined}
-                            note={
-                              hasCover
-                                ? 'Asked for cover'
-                                : emp && !emp.active
-                                  ? 'Deactivated'
-                                  : 'Open'
-                            }
-                            ink={C.red}
-                          />
-                        </View>
-                      ) : (
-                        <View
-                          style={{
-                            backgroundColor: colors.bg,
-                            borderColor: colors.line,
-                            borderWidth: 1,
-                            borderRadius: 14,
-                            padding: 12,
-                          }}
-                        >
-                          <SlotBody
-                            slot={slot}
-                            name={emp?.name}
-                            rating={emp?.rating}
-                            hours={weekMinutes(data.engine.assignments, emp.id)}
-                            ink={colors.ink}
-                          />
-                        </View>
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </Card>
-          );
-        })}
-      </View>
+                          {gap ? (
+                            <View
+                              style={{
+                                borderStyle: 'dashed',
+                                borderWidth: 1.5,
+                                borderColor: C.red,
+                                borderRadius: 14,
+                                padding: 12,
+                                backgroundColor: C.white,
+                              }}
+                            >
+                              <SlotBody
+                                slot={slot}
+                                name={emp?.name}
+                                rating={emp?.rating}
+                                hours={
+                                  emp ? weekMinutes(data.engine.assignments, emp.id) : undefined
+                                }
+                                note={
+                                  hasCover
+                                    ? 'Asked for cover'
+                                    : emp && !emp.active
+                                      ? 'Deactivated'
+                                      : 'Open'
+                                }
+                                ink={C.red}
+                              />
+                            </View>
+                          ) : (
+                            <View
+                              style={{
+                                backgroundColor: colors.bg,
+                                borderColor: colors.line,
+                                borderWidth: 1,
+                                borderRadius: 14,
+                                padding: 12,
+                              }}
+                            >
+                              <SlotBody
+                                slot={slot}
+                                name={emp?.name}
+                                rating={emp?.rating}
+                                hours={weekMinutes(data.engine.assignments, emp.id)}
+                                ink={colors.ink}
+                              />
+                            </View>
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        </>
+      )}
 
       <SectionTitle>Week tools</SectionTitle>
       <View className="gap-2">

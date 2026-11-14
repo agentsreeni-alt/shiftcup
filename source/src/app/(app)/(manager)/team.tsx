@@ -12,12 +12,14 @@ import {
   PressScale,
   Screen,
   SectionTitle,
+  Segmented,
   Sheet,
   Stars,
   TimeField,
 } from '@/components/kit';
 import {
   addEmployee,
+  clearAvailabilityDay,
   planningWeekStart,
   deactivateEmployee,
   markAnswered,
@@ -30,7 +32,7 @@ import { useApp } from '@/lib/app-context';
 import { inviteMessage, isReachable, shareInvite } from '@/lib/invite';
 import { C } from '@/lib/colors';
 import { DAY_LONG, DAY_SHORT, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
-import type { Availability, CafeSettings, Employee } from '@/lib/types';
+import type { Availability, CafeSettings, Employee, UsualDay } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 
 const ROLES: { key: string; label: string }[] = [
@@ -219,22 +221,45 @@ export default function TeamScreen() {
     }
   };
 
-  const saveDay = async (kind: 'any' | 'none' | 'window', startMin: number, endMin: number) => {
+  const saveDay = async (
+    kind: 'any' | 'none' | 'window',
+    startMin: number,
+    endMin: number,
+    scope: 'every' | 'week',
+    allDays = false,
+  ) => {
     if (!cafe || !daySheet) return;
+    const weekdays = allDays ? [0, 1, 2, 3, 4, 5, 6] : [daySheet.weekday];
+    const emp = daySheet.employee;
+    const day: UsualDay = {
+      kind,
+      start_min: kind === 'window' ? startMin : null,
+      end_min: kind === 'window' ? endMin : null,
+    };
     setBusy(true);
     try {
-      await saveAvailabilityRows([
-        {
-          cafe_id: cafe.id,
-          employee_id: daySheet.employee.id,
-          week_start: weekStart,
-          weekday: daySheet.weekday,
-          kind,
-          start_min: kind === 'window' ? startMin : null,
-          end_min: kind === 'window' ? endMin : null,
-        },
-      ]);
-      if (data.request) await markAnswered(data.request.id, daySheet.employee.id);
+      if (scope === 'every') {
+        // Days not set yet start as "not available" until the manager fills them in.
+        const usual: UsualDay[] =
+          Array.isArray(emp.usual_week) && emp.usual_week.length === 7
+            ? [...emp.usual_week]
+            : Array.from({ length: 7 }, () => ({ kind: 'none', start_min: null, end_min: null }));
+        for (const w of weekdays) usual[w] = day;
+        await updateEmployee(emp.id, { usual_week: usual });
+        // Apply it to the week being planned too.
+        for (const w of weekdays) await clearAvailabilityDay(emp.id, weekStart, w);
+      } else {
+        await saveAvailabilityRows(
+          weekdays.map((w) => ({
+            cafe_id: cafe.id,
+            employee_id: emp.id,
+            week_start: weekStart,
+            weekday: w,
+            ...day,
+          })),
+        );
+        if (data.request) await markAnswered(data.request.id, emp.id);
+      }
       await data.reload();
       setDaySheet(null);
     } catch (e) {
@@ -468,13 +493,15 @@ export default function TeamScreen() {
                     ) : null}
                   </View>
                   <Text className="mt-0.5 text-xs text-muted-foreground">
-                    {data.request
-                      ? status === 'answered'
-                        ? 'Answered'
-                        : status === 'unavailable'
-                          ? 'Said not available'
-                          : 'Waiting'
-                      : 'No request sent'}
+                    {(() => {
+                      const hasUsual = Array.isArray(emp.usual_week);
+                      const replied = days.some((d) => !d.from_usual);
+                      if (data.request && status === 'unavailable') return 'Said not available';
+                      if (data.request && replied) return 'Answered';
+                      if (hasUsual) return 'Usual week';
+                      if (data.request) return 'Waiting';
+                      return 'No usual week yet';
+                    })()}
                     {' · '}
                     {emp.max_hours}h max · ${Number(emp.hourly_wage).toFixed(2)}
                     /h
@@ -598,6 +625,13 @@ export default function TeamScreen() {
                   );
                 })}
               </View>
+              <Text className="mt-1.5 text-[11px] text-muted-foreground">
+                {Array.isArray(emp.usual_week)
+                  ? days.some((d) => !d.from_usual)
+                    ? `Usual week, with changes for ${fmtWeekLabel(weekStart)}. Tap a day to edit.`
+                    : 'Usual week. Tap a day to edit.'
+                  : 'Tap a day to set when they can usually work.'}
+              </Text>
 
               <View className="mt-3 flex-row gap-2">
                 <PressScale
@@ -675,6 +709,7 @@ export default function TeamScreen() {
               ) ?? null)
             : null
         }
+        weekLabel={fmtWeekLabel(weekStart)}
         onClose={() => setDaySheet(null)}
         onSave={saveDay}
       />
@@ -901,15 +936,24 @@ function MemberSheet({
 function DaySheet({
   target,
   existing,
+  weekLabel,
   onClose,
   onSave,
 }: {
   target: { employee: Employee; weekday: number } | null;
   existing: Availability | null;
+  weekLabel: string;
   onClose: () => void;
-  onSave: (kind: 'any' | 'none' | 'window', startMin: number, endMin: number) => Promise<void>;
+  onSave: (
+    kind: 'any' | 'none' | 'window',
+    startMin: number,
+    endMin: number,
+    scope: 'every' | 'week',
+    allDays?: boolean,
+  ) => Promise<void>;
 }) {
   const [kind, setKind] = useState<'any' | 'none' | 'window'>('any');
+  const [scope, setScope] = useState<'every' | 'week'>('every');
   const [start, setStart] = useState(660);
   const [end, setEnd] = useState(1320);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -921,6 +965,8 @@ function DaySheet({
     setKind(existing?.kind ?? 'any');
     setStart(existing?.start_min ?? 660);
     setEnd(existing?.end_min ?? 1320);
+    // A day already changed for this week opens on "Only this week".
+    setScope(existing && !existing.from_usual ? 'week' : 'every');
   }
   if (!key && loadedFor !== null) setLoadedFor(null);
 
@@ -937,6 +983,19 @@ function DaySheet({
       title={target ? `${target.employee.name} · ${DAY_SHORT[target.weekday]}` : 'Availability'}
     >
       <View className="gap-3 pb-4">
+        <Segmented
+          options={[
+            { value: 'every', label: 'Every week' },
+            { value: 'week', label: `Only ${weekLabel}` },
+          ]}
+          value={scope}
+          onChange={setScope}
+        />
+        <Text className="text-xs text-muted-foreground">
+          {scope === 'every'
+            ? `Their usual ${target ? DAY_LONG[target.weekday] : 'day'}. Drafts use it every week unless you change a single week.`
+            : `Just for ${weekLabel}. Their usual week stays the same.`}
+        </Text>
         <View className="flex-row gap-1.5">
           {options.map((o) => (
             <PressScale
@@ -971,7 +1030,17 @@ function DaySheet({
           loading={busy}
           onPress={async () => {
             setBusy(true);
-            await onSave(kind, start, end);
+            await onSave(kind, start, end, scope);
+            setBusy(false);
+          }}
+        />
+        <Btn
+          label="Save for all 7 days"
+          variant="ghost"
+          loading={busy}
+          onPress={async () => {
+            setBusy(true);
+            await onSave(kind, start, end, scope, true);
             setBusy(false);
           }}
         />

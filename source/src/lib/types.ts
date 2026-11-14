@@ -59,7 +59,11 @@ export type Employee = {
   active: boolean;
   user_id: string | null;
   invite_code: string;
+  /** Standard availability, Monday first (7 entries). Null until the manager sets it. */
+  usual_week: UsualDay[] | null;
 };
+
+export type UsualDay = { kind: AvailKind; start_min: number | null; end_min: number | null };
 
 /** Employee-safe projection (no wage, no rating, no contact details). */
 export type EmployeeSelf = {
@@ -109,6 +113,8 @@ export type Availability = {
   kind: AvailKind;
   start_min: number | null;
   end_min: number | null;
+  /** True when this day comes from the person's usual week, not this week's answer. */
+  from_usual?: boolean;
 };
 
 export type WeeklyRequest = {

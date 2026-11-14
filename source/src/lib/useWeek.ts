@@ -112,6 +112,29 @@ export function useWeekData(weekStart: string): WeekData {
     }, [load]),
   );
 
+  // This week's answers win; any day without one falls back to the person's usual week.
+  const effectiveAvailability = useMemo<Availability[]>(() => {
+    const out: Availability[] = [...availability];
+    const have = new Set(availability.map((a) => `${a.employee_id}:${a.weekday}`));
+    for (const e of employees) {
+      if (!Array.isArray(e.usual_week) || e.usual_week.length !== 7) continue;
+      e.usual_week.forEach((d, weekday) => {
+        if (!d || have.has(`${e.id}:${weekday}`)) return;
+        out.push({
+          cafe_id: e.cafe_id,
+          employee_id: e.id,
+          week_start: weekStart,
+          weekday,
+          kind: d.kind,
+          start_min: d.kind === 'window' ? d.start_min : null,
+          end_min: d.kind === 'window' ? d.end_min : null,
+          from_usual: true,
+        });
+      });
+    }
+    return out;
+  }, [availability, employees, weekStart]);
+
   const engine = useMemo<EngineContext>(
     () => ({
       employees: employees.map((e) => ({
@@ -124,7 +147,7 @@ export function useWeekData(weekStart: string): WeekData {
         active: e.active,
         hourlyWage: Number(e.hourly_wage),
       })),
-      availability: availability.map((a) => ({
+      availability: effectiveAvailability.map((a) => ({
         employeeId: a.employee_id,
         weekday: a.weekday,
         kind: a.kind,
@@ -147,7 +170,7 @@ export function useWeekData(weekStart: string): WeekData {
       statuses: {
         ...Object.fromEntries(statuses.map((s) => [s.employee_id, s.status])),
         ...Object.fromEntries(
-          availability
+          effectiveAvailability
             .filter((a) => {
               const st = statuses.find((s) => s.employee_id === a.employee_id)?.status;
               return !st || st === 'waiting';
@@ -156,12 +179,10 @@ export function useWeekData(weekStart: string): WeekData {
         ),
       },
       requestSent: Boolean(request),
-      coverDays: new Set(
-        coverRequests.map((c) => `${c.employee_id}:${c.weekday}`),
-      ),
+      coverDays: new Set(coverRequests.map((c) => `${c.employee_id}:${c.weekday}`)),
       maxShiftHours: settings?.max_shift_hours ?? 8,
     }),
-    [employees, availability, assignments, statuses, request, coverRequests, settings],
+    [employees, effectiveAvailability, assignments, statuses, request, coverRequests, settings],
   );
 
   const engineBlocks = useMemo(
@@ -188,10 +209,7 @@ export function useWeekData(weekStart: string): WeekData {
 
   const totalMinutes = useMemo(
     () =>
-      engine.assignments.reduce(
-        (sum, a) => sum + (a.employeeId ? a.endMin - a.startMin : 0),
-        0,
-      ),
+      engine.assignments.reduce((sum, a) => sum + (a.employeeId ? a.endMin - a.startMin : 0), 0),
     [engine.assignments],
   );
 
@@ -205,7 +223,7 @@ export function useWeekData(weekStart: string): WeekData {
     error,
     employees,
     blocks,
-    availability,
+    availability: effectiveAvailability,
     request,
     statuses,
     assignments,

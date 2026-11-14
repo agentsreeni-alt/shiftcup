@@ -6,7 +6,12 @@ import {
   buildShiftReminders,
   type ReminderDraft,
 } from '@/lib/reminders';
-import { SAMPLE_CAFE_NAME, SAMPLE_CLOSE_MIN, SAMPLE_EMPLOYEES, SAMPLE_OPEN_MIN } from '@/lib/sample';
+import {
+  SAMPLE_CAFE_NAME,
+  SAMPLE_CLOSE_MIN,
+  SAMPLE_EMPLOYEES,
+  SAMPLE_OPEN_MIN,
+} from '@/lib/sample';
 import type {
   Assignment,
   Availability,
@@ -74,7 +79,11 @@ export async function loadEmployeeSelf(): Promise<EmployeeSelf | null> {
   return (data as EmployeeSelf) ?? null;
 }
 
-export async function loadEmployeeCafe(): Promise<{ id: string; name: string; is_sample: boolean } | null> {
+export async function loadEmployeeCafe(): Promise<{
+  id: string;
+  name: string;
+  is_sample: boolean;
+} | null> {
   const { data, error } = await supabase
     .from('my_cafe_info')
     .select('id, name, is_sample')
@@ -87,7 +96,7 @@ export async function loadEmployees(cafeId: string): Promise<Employee[]> {
   const { data, error } = await supabase
     .from('employees')
     .select(
-      'id, cafe_id, name, email, phone, roles, can_work_alone, rating, max_hours, hourly_wage, active, user_id, invite_code',
+      'id, cafe_id, name, email, phone, roles, can_work_alone, rating, max_hours, hourly_wage, active, user_id, invite_code, usual_week',
     )
     .eq('cafe_id', cafeId)
     .order('name', { ascending: true });
@@ -128,10 +137,7 @@ export async function loadSettings(cafeId: string): Promise<CafeSettings | null>
   return (data as CafeSettings) ?? null;
 }
 
-export async function loadAvailability(
-  cafeId: string,
-  weekStart: string,
-): Promise<Availability[]> {
+export async function loadAvailability(cafeId: string, weekStart: string): Promise<Availability[]> {
   const { data, error } = await supabase
     .from('availability')
     .select('id, cafe_id, employee_id, week_start, weekday, kind, start_min, end_min')
@@ -162,10 +168,7 @@ export async function loadRequest(
   return { request, statuses: Array.isArray(rows) ? (rows as RequestStatus[]) : [] };
 }
 
-export async function loadAssignments(
-  cafeId: string,
-  weekStart: string,
-): Promise<Assignment[]> {
+export async function loadAssignments(cafeId: string, weekStart: string): Promise<Assignment[]> {
   const { data, error } = await supabase
     .from('assignments')
     .select(
@@ -196,7 +199,9 @@ export async function loadPublished(
 export async function loadCoverRequests(cafeId: string): Promise<CoverRequest[]> {
   const { data, error } = await supabase
     .from('cover_requests')
-    .select('id, cafe_id, assignment_id, employee_id, week_start, weekday, note, resolved, created_at')
+    .select(
+      'id, cafe_id, assignment_id, employee_id, week_start, weekday, note, resolved, created_at',
+    )
     .eq('cafe_id', cafeId)
     .eq('resolved', false)
     .order('created_at', { ascending: false })
@@ -208,7 +213,9 @@ export async function loadCoverRequests(cafeId: string): Promise<CoverRequest[]>
 export async function loadReminders(cafeId: string, weekStart: string): Promise<Reminder[]> {
   const { data, error } = await supabase
     .from('reminders')
-    .select('id, cafe_id, employee_id, week_start, weekday, kind, send_at, body, channel, state, sent_at')
+    .select(
+      'id, cafe_id, employee_id, week_start, weekday, kind, send_at, body, channel, state, sent_at',
+    )
     .eq('cafe_id', cafeId)
     .eq('week_start', weekStart)
     .order('send_at', { ascending: true })
@@ -394,9 +401,7 @@ export async function sendWeeklyRequest(params: {
     ]);
   if (existingError) throw existingError;
   if (availError) throw availError;
-  const prior = new Map(
-    (existing ?? []).map((r) => [r.employee_id as string, r.status as string]),
-  );
+  const prior = new Map((existing ?? []).map((r) => [r.employee_id as string, r.status as string]));
   const sentAvailability = new Set((availRows ?? []).map((r) => r.employee_id as string));
 
   const rows = params.employeeIds.map((employeeId) => {
@@ -692,7 +697,7 @@ export async function addEmployee(params: {
       hourly_wage: params.hourlyWage,
     })
     .select(
-      'id, cafe_id, name, email, phone, roles, can_work_alone, rating, max_hours, hourly_wage, active, user_id, invite_code',
+      'id, cafe_id, name, email, phone, roles, can_work_alone, rating, max_hours, hourly_wage, active, user_id, invite_code, usual_week',
     )
     .maybeSingle();
   if (error) throw error;
@@ -714,6 +719,7 @@ export async function updateEmployee(
       | 'max_hours'
       | 'hourly_wage'
       | 'active'
+      | 'usual_week'
     >
   >,
 ): Promise<void> {
@@ -722,10 +728,7 @@ export async function updateEmployee(
 }
 
 export async function deactivateEmployee(cafeId: string, employeeId: string): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update({ active: false })
-    .eq('id', employeeId);
+  const { error } = await supabase.from('employees').update({ active: false }).eq('id', employeeId);
   if (error) throw error;
   const { error: reminderError } = await supabase
     .from('reminders')
@@ -734,6 +737,21 @@ export async function deactivateEmployee(cafeId: string, employeeId: string): Pr
     .eq('employee_id', employeeId)
     .eq('state', 'queued');
   if (reminderError) throw reminderError;
+}
+
+/** Removes one day of a person's availability for one week, so their usual week applies. */
+export async function clearAvailabilityDay(
+  employeeId: string,
+  weekStart: string,
+  weekday: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from('availability')
+    .delete()
+    .eq('employee_id', employeeId)
+    .eq('week_start', weekStart)
+    .eq('weekday', weekday);
+  if (error) throw error;
 }
 
 export async function saveAvailabilityRows(rows: Availability[]): Promise<void> {
@@ -803,7 +821,9 @@ export async function loadMyAssignments(weekStart: string): Promise<Assignment[]
 export async function loadMyCoverRequests(): Promise<CoverRequest[]> {
   const { data, error } = await supabase
     .from('cover_requests')
-    .select('id, cafe_id, assignment_id, employee_id, week_start, weekday, note, resolved, created_at')
+    .select(
+      'id, cafe_id, assignment_id, employee_id, week_start, weekday, note, resolved, created_at',
+    )
     .eq('resolved', false)
     .order('created_at', { ascending: false })
     .limit(50);
@@ -814,7 +834,9 @@ export async function loadMyCoverRequests(): Promise<CoverRequest[]> {
 export async function loadMyReminders(): Promise<Reminder[]> {
   const { data, error } = await supabase
     .from('reminders')
-    .select('id, cafe_id, employee_id, week_start, weekday, kind, send_at, body, channel, state, sent_at')
+    .select(
+      'id, cafe_id, employee_id, week_start, weekday, kind, send_at, body, channel, state, sent_at',
+    )
     .eq('state', 'queued')
     .order('send_at', { ascending: true })
     .limit(20);
@@ -889,7 +911,7 @@ export async function loadMyEmployees(): Promise<Employee[]> {
   const { data, error } = await supabase
     .from('employees')
     .select(
-      'id, cafe_id, name, email, phone, roles, can_work_alone, rating, max_hours, hourly_wage, active, user_id, invite_code',
+      'id, cafe_id, name, email, phone, roles, can_work_alone, rating, max_hours, hourly_wage, active, user_id, invite_code, usual_week',
     )
     .order('name', { ascending: true });
   if (error) throw error;
@@ -913,4 +935,25 @@ export async function loadMyCafeSettings(): Promise<CafeSettings | null> {
 export function weekStartFromOffset(offset: number): string {
   const base = startOfWeek(new Date());
   return toISODate(addDays(base, offset * 7));
+}
+
+/** Employee side: first names of the active people in my café. */
+export async function loadMyTeam(): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabase
+    .from('my_team')
+    .select('id, name')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? (data as { id: string; name: string }[]) : [];
+}
+
+/** Employee side: the published week for my café (never the draft). */
+export async function loadMyPublishedWeek(weekStart: string): Promise<PublishedSchedule | null> {
+  const { data, error } = await supabase
+    .from('published_schedules')
+    .select('id, cafe_id, week_start, published_at, snapshot')
+    .eq('week_start', weekStart)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as PublishedSchedule) ?? null;
 }

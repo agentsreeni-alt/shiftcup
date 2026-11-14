@@ -14,7 +14,7 @@ import type { Assignment, CafeSettings } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 import { changedSincePublish as changedSincePublish_ } from '@/lib/utils';
 
-const STEPS = ['Ask', 'Draft', 'Fix gaps', 'Publish'];
+const STEPS = ['Availability', 'Draft', 'Fix gaps', 'Publish'];
 
 const FALLBACK_SETTINGS: CafeSettings = {
   cafe_id: '',
@@ -56,6 +56,9 @@ export default function TodayScreen() {
   ];
   const filledCount = data.assignments.filter((a) => a.employee_id).length;
   const hasRequest = Boolean(data.request);
+  // People with a usual week can be scheduled without asking them first.
+  const noUsual = activeEmployees.filter((e) => !Array.isArray(e.usual_week));
+  const anyUsual = noUsual.length < activeEmployees.length;
   const hasDraft = filledCount > 0;
   const issueCount = data.gaps.length + data.clashes.length;
 
@@ -63,7 +66,7 @@ export default function TodayScreen() {
     Boolean(data.published) && changedSincePublish_(data.published?.snapshot, data.assignments);
 
   let step = 0;
-  if (hasRequest) step = 1;
+  if (hasRequest || anyUsual) step = 1;
   if (hasDraft) step = 2;
   if (hasDraft && issueCount === 0) step = 3;
   // A published week stays published, even if the manager accepted some gaps.
@@ -146,7 +149,17 @@ export default function TodayScreen() {
         settings,
       });
       await data.reload();
-      setMessage('Published. Your team has their shifts and reminders.');
+      const working = activeEmployees.filter((e) =>
+        data.assignments.some((a) => a.employee_id === e.id),
+      );
+      const unreachable = working.filter((e) => !isReachable(e));
+      setMessage(
+        unreachable.length === 0
+          ? 'Published. Everyone working got their schedule by email and can see it in the app.'
+          : `Published. ${unreachable.map((e) => e.name).join(', ')} ${
+              unreachable.length === 1 ? 'has' : 'have'
+            } not joined, so share the schedule with them from the Schedule tab.`,
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not publish.');
     } finally {
@@ -159,7 +172,7 @@ export default function TodayScreen() {
       router.push('/(app)/billing');
       return;
     }
-    if (step === 0) return runSendRequest();
+    if (step === 0) return router.push('/(app)/(manager)/team');
     if (step === 1) return runDraft();
     if (step === 2) return router.push('/(app)/(manager)/schedule');
     if (step === 3) return runPublish();
@@ -169,7 +182,7 @@ export default function TodayScreen() {
   const nextLabel = !hasAccess
     ? 'Subscribe to keep scheduling'
     : step === 0
-      ? 'Send the availability request'
+      ? 'Set usual weeks in Team'
       : step === 1
         ? 'Build the draft'
         : step === 2
@@ -262,24 +275,40 @@ export default function TodayScreen() {
         </View>
         <Text className="mb-3 text-sm text-muted-foreground">
           {step === 0
-            ? 'Ask your team when they can work next week.'
-            : step === 1
-              ? waiting.length === 0
-                ? 'Everyone answered. Build the draft and ShiftCup fills what it can.'
-                : `${waiting.length} still ${waiting.length === 1 ? 'has' : 'have'} not answered. You can build the draft now and fill them in later.`
-              : step === 2
-                ? `${issueCount} ${issueCount === 1 ? 'thing needs' : 'things need'} a decision before you publish.`
-                : step === 3
-                  ? changedSincePublish
-                    ? 'You changed the week after publishing. Publish again so your team sees it.'
-                    : 'No gaps and no clashes. Publish when you are ready.'
-                  : data.gaps.length > 0
-                    ? `Published. Your team has their shifts. ${data.gaps.length} ${
-                        data.gaps.length === 1 ? 'slot is' : 'slots are'
-                      } still open.`
-                    : 'Published. Your team has their shifts.'}
+            ? 'Set when each person can usually work, and ShiftCup drafts every week from that. Or ask your team for next week.'
+            : step === 1 && !hasRequest
+              ? noUsual.length === 0
+                ? 'Drafts use everyone’s usual week. Build it, adjust, then publish to send everyone their shifts.'
+                : `Drafts use each person’s usual week. ${noUsual.map((e) => e.name).join(', ')} ${
+                    noUsual.length === 1 ? 'has' : 'have'
+                  } none yet, so they will not be scheduled.`
+              : step === 1
+                ? waiting.length === 0
+                  ? 'Everyone answered. Build the draft and ShiftCup fills what it can.'
+                  : `${waiting.length} still ${waiting.length === 1 ? 'has' : 'have'} not answered. You can build the draft now and fill them in later.`
+                : step === 2
+                  ? `${issueCount} ${issueCount === 1 ? 'thing needs' : 'things need'} a decision before you publish.`
+                  : step === 3
+                    ? changedSincePublish
+                      ? 'You changed the week after publishing. Publish again so your team sees it.'
+                      : 'No gaps and no clashes. Publish when you are ready.'
+                    : data.gaps.length > 0
+                      ? `Published. Your team has their shifts. ${data.gaps.length} ${
+                          data.gaps.length === 1 ? 'slot is' : 'slots are'
+                        } still open.`
+                      : 'Published. Your team has their shifts.'}
         </Text>
         <Btn label={nextLabel} loading={busy} onPress={nextAction} />
+        {hasAccess && !hasRequest && step <= 1 ? (
+          <View className="mt-2">
+            <Btn
+              label="Ask my team for next week"
+              variant="ghost"
+              loading={busy}
+              onPress={runSendRequest}
+            />
+          </View>
+        ) : null}
         {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
       </Card>
 
@@ -298,14 +327,16 @@ export default function TodayScreen() {
         />
         <AttentionRow
           icon={<Users size={16} color={C.pine} />}
-          title={hasRequest ? 'Have not answered' : 'Not asked yet'}
+          title={hasRequest ? 'Have not answered' : 'No availability yet'}
           value={waiting.length}
           detail={
             waiting.length === 0
-              ? 'Everyone has replied.'
+              ? hasRequest
+                ? 'Everyone has replied.'
+                : 'Everyone has a usual week.'
               : hasRequest
                 ? waiting.map((e) => e.name).join(', ')
-                : `Send the request to ask ${waiting.map((e) => e.name).join(', ')}.`
+                : `Set a usual week for ${waiting.map((e) => e.name).join(', ')} in Team.`
           }
           onPress={() => router.push('/(app)/(manager)/team')}
         />
