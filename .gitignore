@@ -6,3 +6,4 @@ firebase-debug.log
 node_modules/
 .claude/
 source/supabase/.temp/
+supabase/.temp/
