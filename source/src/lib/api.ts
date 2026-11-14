@@ -1010,6 +1010,18 @@ export async function loadMyPublishedWeek(weekStart: string): Promise<PublishedS
 
 // ---------- availability change requests ----------
 
+// Lets the tab bar's waiting-count refresh the moment a request is decided.
+const inboxListeners = new Set<() => void>();
+export function onInboxChanged(listener: () => void): () => void {
+  inboxListeners.add(listener);
+  return () => {
+    inboxListeners.delete(listener);
+  };
+}
+function notifyInboxChanged() {
+  for (const l of inboxListeners) l();
+}
+
 const REQUEST_COLUMNS =
   'id, cafe_id, employee_id, scope, week_start, days, note, status, created_at, decided_at';
 
@@ -1119,6 +1131,7 @@ export async function decideAvailabilityRequest(
     .eq('id', request.id)
     .eq('status', 'pending');
   if (error) throw error;
+  notifyInboxChanged();
 
   // Tell the person. Best effort: the decision stands even if the message cannot be queued.
   const what =

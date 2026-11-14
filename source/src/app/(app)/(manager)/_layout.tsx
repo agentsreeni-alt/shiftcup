@@ -1,8 +1,10 @@
 import { Redirect, Tabs } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { CalendarDays, Settings, Sun, Users } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Loading } from '@/components/kit';
+import { loadCoverRequests, loadPendingAvailabilityRequests, onInboxChanged } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 
@@ -11,6 +13,35 @@ export const unstable_settings = { anchor: 'today' };
 export default function ManagerLayout() {
   const { profile, cafe, loading } = useApp();
   const insets = useSafeAreaInsets();
+  const [waiting, setWaiting] = useState(0);
+  const cafeId = cafe?.id;
+
+  // A count on the Today tab for things the team is waiting on: availability requests and
+  // people who can't make a shift. Refreshed every minute while the app is open.
+  useEffect(() => {
+    if (!cafeId) return;
+    let alive = true;
+    const check = async () => {
+      try {
+        const [asks, covers] = await Promise.all([
+          loadPendingAvailabilityRequests(cafeId),
+          loadCoverRequests(cafeId),
+        ]);
+        const coverDays = new Set(covers.map((c) => `${c.employee_id}:${c.week_start}:${c.weekday}`));
+        if (alive) setWaiting(asks.length + coverDays.size);
+      } catch {
+        // The badge is a hint only; the Today screen shows the real state.
+      }
+    };
+    void check();
+    const timer = setInterval(check, 60_000);
+    const off = onInboxChanged(check);
+    return () => {
+      alive = false;
+      off();
+      clearInterval(timer);
+    };
+  }, [cafeId]);
 
   if (loading) return <Loading />;
   if (profile?.role !== 'manager') return <Redirect href="/(app)/home" />;
@@ -40,6 +71,8 @@ export default function ManagerLayout() {
         name="today"
         options={{
           title: 'Today',
+          tabBarBadge: waiting > 0 ? waiting : undefined,
+          tabBarBadgeStyle: { backgroundColor: C.red, color: C.white, fontSize: 11 },
           tabBarIcon: ({ color, size }) => <Sun size={size} color={color} />,
         }}
       />

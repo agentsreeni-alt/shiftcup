@@ -5,6 +5,7 @@ import { PortalHost } from '@rn-primitives/portal';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { ToastHost } from '@/components/kit';
 import { SessionProvider, useSession } from '@/ctx';
 import { AppProvider } from '@/lib/app-context';
 import { C } from '@/lib/colors';
@@ -56,6 +57,7 @@ const RootLayout: React.FC = () => {
           <StatusBar style="dark" />
           <RootLayoutNav />
           <PortalHost />
+          <ToastHost />
         </AppProvider>
       </SessionProvider>
     </GestureHandlerRootView>

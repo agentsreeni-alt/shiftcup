@@ -1,10 +1,11 @@
 import { ArrowLeft, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -16,6 +17,8 @@ import {
 } from 'react-native';
 import Animated, {
   FadeIn,
+  FadeInDown,
+  FadeOut,
   SlideInDown,
   useAnimatedStyle,
   useReducedMotion,
@@ -97,12 +100,25 @@ export function Screen({
   scroll = true,
   padded = true,
   edges = ['top'],
+  onRefresh,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   padded?: boolean;
   edges?: ('top' | 'bottom' | 'left' | 'right')[];
+  /** Pull down to reload. The spinner stays until the returned promise settles. */
+  onRefresh?: () => Promise<unknown>;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const pull = useCallback(async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh]);
   return (
     <SafeAreaView edges={edges} className="flex-1 bg-background">
       {scroll ? (
@@ -111,7 +127,13 @@ export function Screen({
           contentContainerStyle={WIDE_LIMIT}
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={C.pine} />
+            ) : undefined
+          }
         >
           {children}
         </ScrollView>
@@ -610,4 +632,80 @@ export function Row({
   className?: string;
 }) {
   return <View className={`flex-row items-center gap-2 ${className}`}>{children}</View>;
+}
+
+/** A grey placeholder the shape of the content that is loading, so the page does not jump. */
+export function Skeleton({ height = 72, className = '' }: { height?: number; className?: string }) {
+  return (
+    <View
+      className={`rounded-2xl bg-muted ${className}`}
+      style={{ height, borderCurve: 'continuous', opacity: 0.7 }}
+      accessibilityLabel="Loading"
+    />
+  );
+}
+
+// ---------- toast ----------
+// One short confirmation at a time, floating above the tab bar, so feedback is visible
+// wherever the person has scrolled to. Errors that need reading stay inline on the screen.
+
+type ToastState = { id: number; text: string; tone: 'ok' | 'error' };
+let toastListener: ((t: ToastState | null) => void) | null = null;
+let toastSeq = 0;
+
+export function toast(text: string, tone: 'ok' | 'error' = 'ok') {
+  toastSeq += 1;
+  toastListener?.({ id: toastSeq, text, tone });
+}
+
+export function ToastHost() {
+  const [current, setCurrent] = useState<ToastState | null>(null);
+  const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    toastListener = setCurrent;
+    return () => {
+      toastListener = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!current) return;
+    // Longer messages stay longer: roughly reading speed, between 2.5 and 6 seconds.
+    const ms = Math.min(6000, Math.max(2500, current.text.length * 60));
+    const timer = setTimeout(() => setCurrent(null), ms);
+    return () => clearTimeout(timer);
+  }, [current]);
+
+  if (!current) return null;
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{ position: 'absolute', left: 0, right: 0, bottom: insets.bottom + 76 }}
+      className="items-center px-4"
+    >
+      <Animated.View
+        key={current.id}
+        entering={reduced ? FadeIn.duration(150) : FadeInDown.duration(220).easing(EASE_OUT)}
+        exiting={FadeOut.duration(150)}
+        style={{ maxWidth: 520, width: '100%' }}
+      >
+        <Pressable
+          onPress={() => setCurrent(null)}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          className="rounded-2xl px-4 py-3.5"
+          style={[
+            { backgroundColor: current.tone === 'error' ? C.red : C.pine, borderCurve: 'continuous' },
+            { boxShadow: '0 10px 30px -10px rgba(12, 28, 22, 0.5)' },
+          ]}
+        >
+          <Text className="text-sm font-semibold" style={{ color: C.cream }}>
+            {current.text}
+          </Text>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
 }
