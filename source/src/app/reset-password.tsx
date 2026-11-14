@@ -79,66 +79,76 @@ export default function ResetPasswordScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView behavior="padding" className="flex-1">
-        <ScrollView
-          contentContainerClassName="flex-grow justify-center px-6 py-10"
-          keyboardShouldPersistTaps="handled"
-        >
-          <View className="gap-6">
-            <View className="gap-2">
-              <Text className="text-3xl font-bold text-foreground">
-                {done ? 'Password changed' : 'Choose a new password'}
-              </Text>
-              <Text className="text-base text-muted-foreground">
-                {done
-                  ? 'You are signed in. Use the new password next time.'
-                  : 'Pick something you have not used here before.'}
-              </Text>
-            </View>
+      <View style={{ flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center' }}>
+        <KeyboardAvoidingView behavior="padding" className="flex-1">
+          <ScrollView
+            contentContainerClassName="flex-grow justify-center px-6 py-10"
+            keyboardShouldPersistTaps="handled"
+          >
+            <View className="gap-6">
+              <View className="gap-2">
+                <Text className="text-3xl font-bold text-foreground">
+                  {done ? 'Password changed' : 'Choose a new password'}
+                </Text>
+                <Text className="text-base text-muted-foreground">
+                  {done
+                    ? 'You are signed in. Use the new password next time.'
+                    : 'Pick something you have not used here before.'}
+                </Text>
+              </View>
 
-            {done ? (
-              <Btn label="Open ShiftCup" size="lg" onPress={() => router.replace('/(app)/home')} />
-            ) : linkError ? (
-              <View className="gap-4">
-                <Text className="text-sm text-destructive">{linkError}</Text>
-                <Btn label="Back to sign in" variant="ghost" onPress={() => router.replace('/(auth)/sign-in')} />
-              </View>
-            ) : !ready ? (
-              <Text className="text-sm text-muted-foreground">Checking your link…</Text>
-            ) : (
-              <View className="gap-4">
-                <View className="gap-1.5">
-                  <Text className="text-sm font-medium text-foreground">New password</Text>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                    autoComplete="new-password"
-                    placeholder="At least 6 characters"
-                    placeholderTextColor={C.muted}
-                    className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
+              {done ? (
+                <Btn
+                  label="Open ShiftCup"
+                  size="lg"
+                  onPress={() => router.replace('/(app)/home')}
+                />
+              ) : linkError ? (
+                <View className="gap-4">
+                  <Text className="text-sm text-destructive">{linkError}</Text>
+                  <Btn
+                    label="Back to sign in"
+                    variant="ghost"
+                    onPress={() => router.replace('/(auth)/sign-in')}
                   />
                 </View>
-                <View className="gap-1.5">
-                  <Text className="text-sm font-medium text-foreground">Type it again</Text>
-                  <TextInput
-                    value={confirm}
-                    onChangeText={setConfirm}
-                    secureTextEntry
-                    autoComplete="new-password"
-                    returnKeyType="go"
-                    onSubmitEditing={save}
-                    placeholderTextColor={C.muted}
-                    className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
-                  />
+              ) : !ready ? (
+                <Text className="text-sm text-muted-foreground">Checking your link…</Text>
+              ) : (
+                <View className="gap-4">
+                  <View className="gap-1.5">
+                    <Text className="text-sm font-medium text-foreground">New password</Text>
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                      autoComplete="new-password"
+                      placeholder="At least 6 characters"
+                      placeholderTextColor={C.muted}
+                      className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
+                    />
+                  </View>
+                  <View className="gap-1.5">
+                    <Text className="text-sm font-medium text-foreground">Type it again</Text>
+                    <TextInput
+                      value={confirm}
+                      onChangeText={setConfirm}
+                      secureTextEntry
+                      autoComplete="new-password"
+                      returnKeyType="go"
+                      onSubmitEditing={save}
+                      placeholderTextColor={C.muted}
+                      className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
+                    />
+                  </View>
+                  {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+                  <Btn label="Save new password" size="lg" loading={busy} onPress={save} />
                 </View>
-                {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-                <Btn label="Save new password" size="lg" loading={busy} onPress={save} />
-              </View>
-            )}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+              )}
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

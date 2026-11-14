@@ -1,4 +1,5 @@
-import { X } from 'lucide-react-native';
+import { ArrowLeft, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -72,6 +73,25 @@ export function PressScale({
   );
 }
 
+/** Back arrow that still works when the page was opened directly (no history). */
+export function BackButton({ fallback = '/', label = 'Go back' }: { fallback?: string; label?: string }) {
+  const router = useRouter();
+  return (
+    <Pressable
+      onPress={() => (router.canGoBack() ? router.back() : router.replace(fallback as never))}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      className="-ml-2 h-11 w-11 items-center justify-center rounded-full active:opacity-60"
+    >
+      <ArrowLeft size={22} color={C.pine} />
+    </Pressable>
+  );
+}
+
+// On tablets and desktop browsers, keep content at a readable width instead of edge to edge.
+const WIDE_LIMIT: ViewStyle = { width: '100%', maxWidth: 680, alignSelf: 'center' };
+
 export function Screen({
   children,
   scroll = true,
@@ -88,6 +108,7 @@ export function Screen({
       {scroll ? (
         <ScrollView
           contentContainerClassName={padded ? 'px-5 pb-28 pt-2' : undefined}
+          contentContainerStyle={WIDE_LIMIT}
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -95,7 +116,9 @@ export function Screen({
           {children}
         </ScrollView>
       ) : (
-        <View className={padded ? 'flex-1 px-5 pt-2' : 'flex-1'}>{children}</View>
+        <View className={padded ? 'flex-1 px-5 pt-2' : 'flex-1'} style={WIDE_LIMIT}>
+          {children}
+        </View>
       )}
     </SafeAreaView>
   );
@@ -239,7 +262,8 @@ export function Btn({
       onPress={onPress}
       disabled={disabled || loading}
       accessibilityRole="button"
-      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
+      aria-disabled={!!(disabled || loading)}
+      aria-busy={!!loading}
       className={`flex-row items-center justify-center gap-2 rounded-xl ${sizes[size]} ${
         variants[variant]
       } ${full ? 'w-full' : ''} ${disabled ? 'opacity-40' : ''}`}
@@ -464,7 +488,7 @@ export function TimeField({
                 onChange(m);
                 setOpen(false);
               }}
-              accessibilityState={{ selected: m === value }}
+              aria-selected={m === value}
               style={{ width: '23.5%' }}
               className={`items-center rounded-lg border py-2.5 ${
                 m === value ? 'border-primary bg-primary' : 'border-border bg-card'
@@ -551,7 +575,7 @@ export function Segmented<T extends string>({
               onChange(o.value);
             }}
             accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
+            aria-selected={active}
             className={`flex-1 items-center rounded-lg px-2 py-2 ${
               segW > 0 ? '' : active ? 'bg-card' : ''
             }`}

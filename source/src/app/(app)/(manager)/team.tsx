@@ -1,10 +1,21 @@
 import { useRouter } from 'expo-router';
-import { Check, Minus, Plus, Send, Sparkles, UserPlus } from 'lucide-react-native';
+import { Check, Minus, Plus, Send, Share2, Sparkles, UserPlus } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { AppBar, Btn, Card, Pill, PressScale, Screen, SectionTitle, Sheet, Stars, TimeField } from '@/components/kit';
+import {
+  AppBar,
+  Btn,
+  Card,
+  Pill,
+  PressScale,
+  Screen,
+  SectionTitle,
+  Sheet,
+  Stars,
+  TimeField,
+} from '@/components/kit';
 import {
   addEmployee,
   planningWeekStart,
@@ -16,8 +27,9 @@ import {
   updateEmployee,
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
+import { inviteMessage, isReachable, shareInvite } from '@/lib/invite';
 import { C } from '@/lib/colors';
-import { DAY_SHORT, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
+import { DAY_LONG, DAY_SHORT, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
 import type { Availability, CafeSettings, Employee } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 
@@ -38,12 +50,22 @@ const FALLBACK_SETTINGS: CafeSettings = {
   channel: 'email',
 };
 
-type ParsedDay = { weekday: number; kind: 'any' | 'none' | 'window'; start_min: number; end_min: number };
-type Parsed = { employee_id: string | null; employee_name: string; days: ParsedDay[]; unclear?: string };
+type ParsedDay = {
+  weekday: number;
+  kind: 'any' | 'none' | 'window';
+  start_min: number;
+  end_min: number;
+};
+type Parsed = {
+  employee_id: string | null;
+  employee_name: string;
+  days: ParsedDay[];
+  unclear?: string;
+};
 
 export default function TeamScreen() {
   const router = useRouter();
-  const { cafe, hasAccess } = useApp();
+  const { cafe, cafeName, hasAccess } = useApp();
   const weekStart = planningWeekStart();
   const data = useWeekData(weekStart);
   const settings = data.settings ?? FALLBACK_SETTINGS;
@@ -56,11 +78,17 @@ export default function TeamScreen() {
   const [parsedFor, setParsedFor] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
 
-  const [memberSheet, setMemberSheet] = useState<{ open: boolean; editing: Employee | null }>({
+  const [memberSheet, setMemberSheet] = useState<{
+    open: boolean;
+    editing: Employee | null;
+  }>({
     open: false,
     editing: null,
   });
-  const [daySheet, setDaySheet] = useState<{ employee: Employee; weekday: number } | null>(null);
+  const [daySheet, setDaySheet] = useState<{
+    employee: Employee;
+    weekday: number;
+  } | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(null);
   const [nudged, setNudged] = useState<Set<string>>(new Set());
 
@@ -90,7 +118,14 @@ export default function TeamScreen() {
         settings,
       });
       await data.reload();
-      setMessage('Request sent to your team.');
+      const notJoined = data.employees.filter((e) => e.active && !isReachable(e));
+      setMessage(
+        notJoined.length === 0
+          ? 'Request sent to your team.'
+          : `Request saved. ${notJoined.map((e) => e.name).join(', ')} ${
+              notJoined.length === 1 ? 'has' : 'have'
+            } not joined yet, so share ${notJoined.length === 1 ? 'their invite' : 'their invites'} below.`,
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not send the request.');
     } finally {
@@ -118,6 +153,17 @@ export default function TeamScreen() {
     }
   };
 
+  const invite = async (emp: Employee) => {
+    const result = await shareInvite(inviteMessage(emp, cafeName || cafe?.name || 'our café'));
+    setMessage(
+      result === 'copied'
+        ? `Invite for ${emp.name} copied. Paste it into a text or email.`
+        : result === 'failed'
+          ? `Could not share. ${emp.name}'s invite code is ${emp.invite_code}.`
+          : '',
+    );
+  };
+
   const runParse = async () => {
     if (!cafe || !paste.trim()) return;
     if (!hasAccess) {
@@ -131,7 +177,7 @@ export default function TeamScreen() {
       const { data: result, error } = await supabase.functions.invoke('parse-availability', {
         body: { cafe_id: cafe.id, text: paste.trim() },
       });
-      if (error) throw new Error('The reader is not available yet. Add the OpenAI key first.');
+      if (error) throw new Error('Reading messages is not available right now. Tap the days on a team card to enter them instead.');
       if (result?.error) throw new Error(String(result.error));
       setParsed(result as Parsed);
       setParsedFor((result as Parsed).employee_id ?? null);
@@ -196,10 +242,7 @@ export default function TeamScreen() {
   };
 
   // Quick edits on a team card. Errors are shown instead of failing silently.
-  const quickUpdate = async (
-    emp: Employee,
-    patch: Parameters<typeof updateEmployee>[1],
-  ) => {
+  const quickUpdate = async (emp: Employee, patch: Parameters<typeof updateEmployee>[1]) => {
     try {
       await updateEmployee(emp.id, patch);
       await data.reload();
@@ -245,6 +288,27 @@ export default function TeamScreen() {
     (e) => e.active && (data.engine.statuses[e.id] ?? 'waiting') === 'waiting',
   );
 
+  // First load: show a spinner, not an empty 'all clear' week.
+
+  if (data.loading && !data.settings && !data.error) {
+
+    return (
+
+      <Screen>
+
+        <View className="items-center py-32">
+
+          <ActivityIndicator color={C.pine} />
+
+        </View>
+
+      </Screen>
+
+    );
+
+  }
+
+
   return (
     <Screen>
       <AppBar title="Team" subtitle={`${data.employees.filter((e) => e.active).length} active`} />
@@ -274,22 +338,36 @@ export default function TeamScreen() {
             {waiting.map((emp) => (
               <View key={emp.id} className="flex-row items-center justify-between">
                 <Text className="text-sm text-foreground">{emp.name}</Text>
-                <Pressable
-                  onPress={() => nudge(emp)}
-                  disabled={nudged.has(emp.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Nudge ${emp.name}`}
-                  hitSlop={8}
-                  className="px-2 py-1 active:opacity-60"
-                >
-                  <Text
-                    className={`text-xs font-semibold ${
-                      nudged.has(emp.id) ? 'text-muted-foreground' : 'text-primary'
-                    }`}
+                {!isReachable(emp) ? (
+                  <Pressable
+                    onPress={() => invite(emp)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Share ${emp.name}'s invite`}
+                    hitSlop={8}
+                    className="px-2 py-1 active:opacity-60"
                   >
-                    {nudged.has(emp.id) ? 'Nudged' : 'Nudge'}
-                  </Text>
-                </Pressable>
+                    <Text className="text-xs font-semibold text-primary">
+                      Not joined · Share invite
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => nudge(emp)}
+                    disabled={nudged.has(emp.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Nudge ${emp.name}`}
+                    hitSlop={8}
+                    className="px-2 py-1 active:opacity-60"
+                  >
+                    <Text
+                      className={`text-xs font-semibold ${
+                        nudged.has(emp.id) ? 'text-muted-foreground' : 'text-primary'
+                      }`}
+                    >
+                      {nudged.has(emp.id) ? 'Nudged' : 'Nudge'}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             ))}
           </View>
@@ -325,7 +403,10 @@ export default function TeamScreen() {
 
         {parsed ? (
           <View className="mt-3 rounded-xl border border-border bg-muted p-3">
-            <Text className="text-xs font-semibold uppercase text-muted-foreground" style={{ letterSpacing: 0.6 }}>
+            <Text
+              className="text-xs font-semibold uppercase text-muted-foreground"
+              style={{ letterSpacing: 0.6 }}
+            >
               {parsedFor ? 'From' : 'Who sent this?'}
             </Text>
             <View className="mt-1.5 flex-row flex-wrap gap-1.5">
@@ -401,7 +482,8 @@ export default function TeamScreen() {
                           : 'Waiting'
                       : 'No request sent'}
                     {' · '}
-                    {emp.max_hours}h max · ${Number(emp.hourly_wage).toFixed(2)}/h
+                    {emp.max_hours}h max · ${Number(emp.hourly_wage).toFixed(2)}
+                    /h
                   </Text>
                 </View>
                 <View className="flex-row items-center gap-1">
@@ -460,6 +542,30 @@ export default function TeamScreen() {
                 </PressScale>
               </View>
 
+              {emp.active && !emp.user_id ? (
+                <View className="mt-3 flex-row items-center gap-3 rounded-xl bg-muted px-3 py-2.5">
+                  <View className="flex-1">
+                    <Text className="text-xs font-semibold text-foreground">Not joined yet</Text>
+                    <Text selectable className="text-[11px] text-muted-foreground">
+                      Invite code{' '}
+                      <Text className="font-bold tracking-widest text-foreground">
+                        {emp.invite_code}
+                      </Text>
+                    </Text>
+                  </View>
+                  <PressScale
+                    onPress={() => invite(emp)}
+                    accessibilityLabel={`Share ${emp.name}'s invite`}
+                    className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
+                  >
+                    <Share2 size={13} color={C.cream} />
+                    <Text className="text-xs font-semibold text-primary-foreground">
+                      Share invite
+                    </Text>
+                  </PressScale>
+                </View>
+              ) : null}
+
               <View className="mt-3 flex-row gap-1">
                 {DAY_SHORT.map((d, i) => {
                   const row = days.find((x) => x.weekday === i);
@@ -468,7 +574,9 @@ export default function TeamScreen() {
                       ? '—'
                       : row.kind === 'any'
                         ? 'Any'
-                        : `${fmtTime(row.start_min ?? 0).replace(':00', '').replace(' ', '')}`;
+                        : `${fmtTime(row.start_min ?? 0)
+                            .replace(':00', '')
+                            .replace(' ', '')}`;
                   const tone =
                     !row || row.kind === 'none'
                       ? 'bg-muted'
@@ -479,6 +587,13 @@ export default function TeamScreen() {
                     <PressScale
                       key={d}
                       onPress={() => setDaySheet({ employee: emp, weekday: i })}
+                      accessibilityLabel={`${emp.name}, ${DAY_LONG[i]}: ${
+                        !row || row.kind === 'none'
+                          ? 'not available'
+                          : row.kind === 'any'
+                            ? 'any time'
+                            : fmtRange(row.start_min ?? 0, row.end_min ?? 0)
+                      }. Change`}
                       className={`flex-1 items-center rounded-lg py-1.5 ${tone}`}
                     >
                       <Text className="text-[9px] font-bold uppercase text-muted-foreground">
@@ -512,7 +627,9 @@ export default function TeamScreen() {
                     }}
                     className="flex-1 items-center rounded-lg bg-primary py-2"
                   >
-                    <Text className="text-xs font-semibold text-primary-foreground">Reactivate</Text>
+                    <Text className="text-xs font-semibold text-primary-foreground">
+                      Reactivate
+                    </Text>
                   </PressScale>
                 )}
               </View>
@@ -559,9 +676,9 @@ export default function TeamScreen() {
         target={daySheet}
         existing={
           daySheet
-            ? (availabilityByEmployee.get(daySheet.employee.id) ?? []).find(
+            ? ((availabilityByEmployee.get(daySheet.employee.id) ?? []).find(
                 (a) => a.weekday === daySheet.weekday,
-              ) ?? null
+              ) ?? null)
             : null
         }
         onClose={() => setDaySheet(null)}
@@ -656,7 +773,11 @@ function MemberSheet({
   };
 
   return (
-    <Sheet visible={open} onClose={onClose} title={editing ? `Edit ${editing.name}` : 'Add a team member'}>
+    <Sheet
+      visible={open}
+      onClose={onClose}
+      title={editing ? `Edit ${editing.name}` : 'Add a team member'}
+    >
       <View className="gap-3 pb-4">
         <TextInput
           value={name}

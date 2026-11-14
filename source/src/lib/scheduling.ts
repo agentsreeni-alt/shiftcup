@@ -106,16 +106,7 @@ export function checkEligibility(
   if (!emp) return { ok: false, reason: 'Cannot: not on the team' };
   if (!emp.active) return { ok: false, reason: 'Cannot: deactivated' };
 
-  if (slot === 'solo') {
-    if (!emp.canWorkAlone) return { ok: false, reason: 'Cannot: cannot work alone' };
-    const missing = JOB_ROLES.filter((r) => !emp.roles.includes(r));
-    if (missing.length > 0) {
-      return { ok: false, reason: `Cannot: not trained as ${JOB_LABEL[missing[0]].toLowerCase()}` };
-    }
-  } else if (!emp.roles.includes(slot)) {
-    return { ok: false, reason: `Cannot: not trained as ${slot}` };
-  }
-
+  // Whether they can come in is the most useful reason, so it is checked first.
   if (ctx.requestSent) {
     const status = ctx.statuses[employeeId] ?? 'waiting';
     if (status === 'waiting') return { ok: false, reason: 'Cannot: has not replied' };
@@ -133,6 +124,16 @@ export function checkEligibility(
     if (avail.startMin > block.startMin || avail.endMin < block.endMin) {
       return { ok: false, reason: 'Cannot: not available for the whole block' };
     }
+  }
+
+  if (slot === 'solo') {
+    if (!emp.canWorkAlone) return { ok: false, reason: 'Cannot: cannot work alone' };
+    const missing = JOB_ROLES.filter((r) => !emp.roles.includes(r));
+    if (missing.length > 0) {
+      return { ok: false, reason: `Cannot: not trained as ${JOB_LABEL[missing[0]].toLowerCase()}` };
+    }
+  } else if (!emp.roles.includes(slot)) {
+    return { ok: false, reason: `Cannot: not trained as ${slot}` };
   }
 
   if (ctx.assignments.some((a) => a.blockId === block.id && a.employeeId === employeeId)) {

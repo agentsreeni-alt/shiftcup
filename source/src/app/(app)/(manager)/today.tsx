@@ -1,16 +1,12 @@
 import { useRouter } from 'expo-router';
 import { AlertTriangle, ArrowRight, Bell, CalendarCheck, Clock, Users } from 'lucide-react-native';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle } from '@/components/kit';
-import {
-  planningWeekStart,
-  publishWeek,
-  saveAssignments,
-  sendWeeklyRequest,
-} from '@/lib/api';
+import { planningWeekStart, publishWeek, saveAssignments, sendWeeklyRequest } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
+import { isReachable } from '@/lib/invite';
 import { C } from '@/lib/colors';
 import { DAY_SHORT, fmtHours, fmtMoney, fmtWeekLabel } from '@/lib/dates';
 import { fillOpenSlots } from '@/lib/scheduling';
@@ -94,7 +90,14 @@ export default function TodayScreen() {
         settings,
       });
       await data.reload();
-      setMessage('Request sent. Your team can answer now.');
+      const notJoined = activeEmployees.filter((e) => !isReachable(e));
+      setMessage(
+        notJoined.length === 0
+          ? 'Request sent. Your team can answer now.'
+          : `Request saved. ${notJoined.map((e) => e.name).join(', ')} ${
+              notJoined.length === 1 ? 'has' : 'have'
+            } not joined yet. Share their invites from the Team tab.`,
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not send the request.');
     } finally {
@@ -170,6 +173,29 @@ export default function TodayScreen() {
             ? 'Approve and publish'
             : 'View the published week';
 
+  // First load: show a spinner, not an empty 'all clear' week.
+
+  if (data.loading && !data.settings && !data.error) {
+    // First load: show a spinner, not an empty 'all clear' week.
+    if (data.loading && !data.settings && !data.error) {
+      return (
+        <Screen>
+          <View className="items-center py-32">
+            <ActivityIndicator color={C.pine} />
+          </View>
+        </Screen>
+      );
+    }
+
+    return (
+      <Screen>
+        <View className="items-center py-32">
+          <ActivityIndicator color={C.pine} />
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <AppBar
@@ -193,7 +219,12 @@ export default function TodayScreen() {
             body="You can still see the schedule and pay. Building, publishing and reminders are paused."
             action={
               <View className="mt-2">
-                <Btn label="Subscribe" size="sm" full={false} onPress={() => router.push('/(app)/billing')} />
+                <Btn
+                  label="Subscribe"
+                  size="sm"
+                  full={false}
+                  onPress={() => router.push('/(app)/billing')}
+                />
               </View>
             }
           />
@@ -248,9 +279,7 @@ export default function TodayScreen() {
                   : 'Published. Your team has their shifts.'}
         </Text>
         <Btn label={nextLabel} loading={busy} onPress={nextAction} />
-        {message ? (
-          <Text className="mt-2 text-xs text-muted-foreground">{message}</Text>
-        ) : null}
+        {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
       </Card>
 
       <SectionTitle>Needs attention</SectionTitle>
@@ -327,9 +356,7 @@ export default function TodayScreen() {
         </View>
       </View>
 
-      {data.error ? (
-        <Text className="mt-4 text-sm text-destructive">{data.error}</Text>
-      ) : null}
+      {data.error ? <Text className="mt-4 text-sm text-destructive">{data.error}</Text> : null}
     </Screen>
   );
 }

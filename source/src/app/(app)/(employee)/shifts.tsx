@@ -18,6 +18,9 @@ import {
 import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
 import {
+  availabilityDueDate,
+  fmtDateTime,
+  fmtDue,
   DAY_LONG,
   dateAtMinutes,
   dateForWeekday,
@@ -205,8 +208,14 @@ export default function MyShiftsScreen() {
               Your manager needs your availability
             </Text>
             <Text className="text-xs text-primary-foreground/80">
-              For next week · due {DAY_LONG[settings?.due_weekday ?? 2]} at{' '}
-              {fmtTime(settings?.due_min ?? 1200)}
+              For next week · due{' '}
+              {fmtDue(
+                availabilityDueDate(
+                  planningWeekStart(),
+                  settings?.due_weekday ?? 2,
+                  settings?.due_min ?? 1200,
+                ),
+              )}
             </Text>
           </View>
           <Text className="text-xs font-semibold text-primary-foreground">Send →</Text>
@@ -217,7 +226,7 @@ export default function MyShiftsScreen() {
         <View className="mb-3 flex-row items-center gap-2 rounded-xl bg-card px-4 py-2.5">
           <Bell size={14} color={C.pine} />
           <Text className="flex-1 text-xs text-muted-foreground">
-            Next reminder: {nextReminder.body}
+            Next reminder, {fmtDateTime(nextReminder.send_at)}: {nextReminder.body}
           </Text>
         </View>
       ) : null}

@@ -14,7 +14,14 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
-import { DAY_LONG, fmtDayDate, fmtTime, fmtWeekLabel } from '@/lib/dates';
+import {
+  availabilityDueDate,
+  DAY_LONG,
+  fmtDayDate,
+  fmtDue,
+  fmtTime,
+  fmtWeekLabel,
+} from '@/lib/dates';
 import type { Availability, CafeSettings } from '@/lib/types';
 
 type Draft = { kind: 'any' | 'none' | 'window'; start: number; end: number };
@@ -120,7 +127,9 @@ export default function AvailabilityScreen() {
         </Text>
         <Text className="mt-0.5 text-xs text-muted-foreground">
           {requestId
-            ? `Due ${DAY_LONG[settings?.due_weekday ?? 2]} at ${fmtTime(settings?.due_min ?? 1200)}.`
+            ? `Due ${fmtDue(
+                availabilityDueDate(weekStart, settings?.due_weekday ?? 2, settings?.due_min ?? 1200),
+              )}.`
             : 'Your manager has not sent a request yet. You can still send this.'}
         </Text>
       </View>

@@ -1,9 +1,7 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
-import { Pressable, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { Text, View } from 'react-native';
 
-import { Screen } from '@/components/kit';
-import { C } from '@/lib/colors';
+import { BackButton, Screen } from '@/components/kit';
 
 const SUPPORT_EMAIL = 'info@gotradeexim.com';
 
@@ -44,16 +42,13 @@ const CONTENT: Record<string, { title: string; body: string[] }> = {
 };
 
 export default function LegalScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams<{ page?: string }>();
   const page = CONTENT[params.page ?? 'privacy'] ?? CONTENT.privacy;
 
   return (
     <Screen>
       <View className="mb-4 flex-row items-center gap-2">
-        <Pressable onPress={() => router.back()} className="p-2 active:opacity-60">
-          <ArrowLeft size={20} color={C.pine} />
-        </Pressable>
+        <BackButton />
         <Text className="flex-1 text-2xl font-bold text-foreground">{page.title}</Text>
       </View>
       <View className="gap-3">

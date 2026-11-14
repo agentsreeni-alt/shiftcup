@@ -1,11 +1,10 @@
-import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { Btn, Card, Notice, Screen, SectionTitle } from '@/components/kit';
+import { BackButton, Btn, Card, Notice, Screen, SectionTitle } from '@/components/kit';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 import { fmtDateShort } from '@/lib/dates';
@@ -13,7 +12,6 @@ import { fmtDateShort } from '@/lib/dates';
 const PRICE = '$29';
 
 export default function BillingScreen() {
-  const router = useRouter();
   const { cafe, isSample, trialDaysLeft, refresh } = useApp();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,7 +27,7 @@ export default function BillingScreen() {
       const { data, error } = await supabase.functions.invoke('stripe-checkout', {
         body: { cafe_id: cafe.id, mode: active ? 'renew' : 'subscribe' },
       });
-      if (error) throw new Error('Billing is not connected yet. Add the Stripe key first.');
+      if (error) throw new Error('Online payment is not available yet. Email info@gotradeexim.com and we will set up your plan.');
       if (data?.error) throw new Error(String(data.error));
       if (data?.url) {
         await Linking.openURL(String(data.url));
@@ -64,9 +62,7 @@ export default function BillingScreen() {
   return (
     <Screen>
       <View className="mb-4 flex-row items-center gap-2">
-        <Pressable onPress={() => router.back()} className="p-2 active:opacity-60">
-          <ArrowLeft size={20} color={C.pine} />
-        </Pressable>
+        <BackButton fallback="/home" />
         <Text className="text-2xl font-bold text-foreground">Plan and billing</Text>
       </View>
 
@@ -122,7 +118,7 @@ export default function BillingScreen() {
           {[
             'Unlimited team members',
             'Automatic drafts and gap checks',
-            'Text reminders for every shift',
+            'Email reminders before every shift',
             'Employees always free',
           ].map((line) => (
             <View key={line} className="flex-row items-center gap-2">

@@ -135,3 +135,19 @@ export function fmtClock(iso: string): string {
   const d = new Date(iso);
   return fmtTime(d.getHours() * 60 + d.getMinutes());
 }
+
+/**
+ * When availability for a planned week is due: the chosen weekday of the week *before*
+ * it (e.g. Wednesday before the week starts), at the chosen time.
+ */
+export function availabilityDueDate(weekStart: string, dueWeekday: number, dueMin: number): Date {
+  return dateAtMinutes(addDays(fromISODate(weekStart), dueWeekday - 7), dueMin);
+}
+
+/** "Wednesday, Nov 11 at 8 PM", or "as soon as you can" once that has passed. */
+export function fmtDue(due: Date, now: Date = new Date()): string {
+  if (due.getTime() <= now.getTime()) return 'as soon as you can';
+  return `${DAY_LONG[weekdayOf(due)]}, ${MONTH_SHORT[due.getMonth()]} ${due.getDate()} at ${fmtTime(
+    due.getHours() * 60 + due.getMinutes(),
+  )}`;
+}

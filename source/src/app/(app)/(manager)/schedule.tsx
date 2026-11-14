@@ -10,7 +10,7 @@ import {
   Wand2,
 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Stars } from '@/components/kit';
 import {
@@ -18,13 +18,14 @@ import {
   publishWeek,
   resolveCoverRequest,
   saveAssignments,
+  updateEmployee,
   weekStartFromOffset,
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
 import { DAY_LONG, DAY_SHORT, fmtHours, fmtRange, fmtWeekLabel, weekdayOf } from '@/lib/dates';
 import { checkEligibility, fillOpenSlots, weekMinutes } from '@/lib/scheduling';
-import type { Assignment, CafeSettings, SlotKind } from '@/lib/types';
+import { JOB_ROLES, type Assignment, type CafeSettings, type Employee, type SlotKind } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 
 const FALLBACK_SETTINGS: CafeSettings = {
@@ -287,6 +288,19 @@ export default function ScheduleScreen() {
       setBusy(false);
     }
   };
+  // One tap from the slot sheet: let someone cover solo shifts, then refresh the sheet.
+  const allowSolo = async (emp: Employee) => {
+    setBusy(true);
+    try {
+      await updateEmployee(emp.id, { can_work_alone: true, roles: [...JOB_ROLES] });
+      await data.reload();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : `Could not update ${emp.name}.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sheetRows = useMemo(() => {
     if (!sheetBlock || !slotSheet) return [];
     const block = {
@@ -299,9 +313,22 @@ export default function ScheduleScreen() {
     return data.employees
       .map((emp) => {
         const result = checkEligibility(emp.id, block, slotSheet.slot, data.engine);
+        // Would they qualify if they could work alone (and were trained for every role)?
+        let soloFix = false;
+        if (!result.ok && slotSheet.slot === 'solo') {
+          const asSolo = {
+            ...data.engine,
+            employees: data.engine.employees.map((e) =>
+              e.id === emp.id ? { ...e, canWorkAlone: true, roles: [...JOB_ROLES] } : e,
+            ),
+          };
+          const retry = checkEligibility(emp.id, block, slotSheet.slot, asSolo);
+          soloFix = retry.ok || Boolean(retry.overLimit);
+        }
         return {
           emp,
           ok: result.ok,
+          soloFix,
           reason: result.reason,
           overLimit: Boolean(result.overLimit),
           hours: weekMinutes(data.engine.assignments, emp.id),
@@ -313,6 +340,27 @@ export default function ScheduleScreen() {
         return a.hours - b.hours;
       });
   }, [sheetBlock, slotSheet, data.employees, data.engine]);
+
+  // First load: show a spinner, not an empty 'all clear' week.
+
+  if (data.loading && !data.settings && !data.error) {
+
+    return (
+
+      <Screen>
+
+        <View className="items-center py-32">
+
+          <ActivityIndicator color={C.pine} />
+
+        </View>
+
+      </Screen>
+
+    );
+
+  }
+
 
   return (
     <Screen>
@@ -694,6 +742,11 @@ export default function ScheduleScreen() {
                   {!row.ok && row.reason ? (
                     <Text className="mt-1 text-xs text-destructive">{reasonText(row.reason)}</Text>
                   ) : null}
+                  {row.soloFix ? (
+                    <Text className="mt-0.5 text-[11px] text-muted-foreground">
+                      Available. Allowing solo also marks them trained for every role.
+                    </Text>
+                  ) : null}
                 </View>
                 {row.ok ? (
                   <PressScale
@@ -701,6 +754,14 @@ export default function ScheduleScreen() {
                     className="rounded-lg bg-primary px-3 py-2"
                   >
                     <Text className="text-xs font-semibold text-primary-foreground">Assign</Text>
+                  </PressScale>
+                ) : row.soloFix ? (
+                  <PressScale
+                    onPress={() => allowSolo(row.emp)}
+                    accessibilityLabel={`Let ${row.emp.name} work alone`}
+                    className="rounded-lg border border-primary px-3 py-2"
+                  >
+                    <Text className="text-xs font-semibold text-primary">Let them work alone</Text>
                   </PressScale>
                 ) : row.overLimit ? (
                   <PressScale

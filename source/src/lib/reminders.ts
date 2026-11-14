@@ -1,4 +1,12 @@
-import { addDays, dateAtMinutes, dateForWeekday, fmtTime, fromISODate } from '@/lib/dates';
+import {
+  addDays,
+  availabilityDueDate,
+  dateAtMinutes,
+  dateForWeekday,
+  fmtDue,
+  fmtTime,
+  fmtWeekLabel,
+} from '@/lib/dates';
 import { allShiftRuns, type EngineAssignment } from '@/lib/scheduling';
 import type { Channel, ReminderKind } from '@/lib/types';
 
@@ -91,10 +99,8 @@ export function buildRequestReminders(params: {
     weekday: params.dueWeekday,
     kind: 'request' as ReminderKind,
     send_at: sendAt.toISOString(),
-    body: `Availability for the week of ${fromISODate(params.weekStart).getMonth() + 1}/${fromISODate(
-      params.weekStart,
-    ).getDate()} is due ${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][params.dueWeekday]} at ${fmtTime(
-      params.dueMin,
+    body: `Availability for the week of ${fmtWeekLabel(params.weekStart)} is due ${fmtDue(
+      availabilityDueDate(params.weekStart, params.dueWeekday, params.dueMin),
     )}. Open ShiftCup to send the days and times you can work.`,
     channel: params.channel,
   }));

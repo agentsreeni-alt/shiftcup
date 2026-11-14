@@ -3,7 +3,16 @@ import { ChevronRight, CreditCard, Plus, Trash2 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { AppBar, Btn, Card, PressScale, Screen, SectionTitle, Sheet, TimeField } from '@/components/kit';
+import {
+  AppBar,
+  Btn,
+  Card,
+  PressScale,
+  Screen,
+  SectionTitle,
+  Sheet,
+  TimeField,
+} from '@/components/kit';
 import {
   addBlock,
   deleteBlock,
@@ -16,7 +25,7 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
-import { DAY_SHORT, fmtRange, } from '@/lib/dates';
+import { DAY_SHORT, fmtRange } from '@/lib/dates';
 import type { CafeSettings, CoverageBlock, StoreHour } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 import { planningWeekStart } from '@/lib/api';
@@ -40,6 +49,9 @@ export default function SettingsScreen() {
   const [blocks, setBlocks] = useState<CoverageBlock[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [nameNote, setNameNote] = useState('');
+  const [hoursNote, setHoursNote] = useState('');
+  const [routineNote, setRoutineNote] = useState('');
   const [blockSheet, setBlockSheet] = useState<{
     open: boolean;
     weekday: number;
@@ -67,24 +79,29 @@ export default function SettingsScreen() {
     if (!cafe) return;
     setBusy(true);
     try {
+      setRoutineNote('');
       await updateSettings(cafe.id, patch);
       await data.reload();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Could not save.');
+      setRoutineNote(e instanceof Error ? e.message : 'Could not save.');
     } finally {
       setBusy(false);
     }
   };
 
   const saveName = async () => {
-    if (!cafe || !name.trim()) return;
+    if (!cafe) return;
+    if (!name.trim()) {
+      setNameNote('Give your café a name first.');
+      return;
+    }
     setBusy(true);
     try {
       await updateCafe(cafe.id, { name: name.trim() });
       await refresh();
-      setMessage('Café name saved.');
+      setNameNote('Café name saved.');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Could not save the name.');
+      setNameNote(e instanceof Error ? e.message : 'Could not save the name.');
     } finally {
       setBusy(false);
     }
@@ -92,15 +109,26 @@ export default function SettingsScreen() {
 
   const saveHour = async (weekday: number, openMin: number, closeMin: number) => {
     if (!cafe) return;
-    await updateStoreHour(cafe.id, weekday, openMin, closeMin);
-    await loadLocal();
+    if (closeMin <= openMin) {
+      setHoursNote(`${DAY_SHORT[weekday]}: closing time must be after opening time.`);
+      return;
+    }
+    try {
+      await updateStoreHour(cafe.id, weekday, openMin, closeMin);
+      await loadLocal();
+      setHoursNote('');
+    } catch (e) {
+      setHoursNote(e instanceof Error ? e.message : 'Could not save the hours.');
+    }
   };
 
   const removeAccount = async () => {
     setBusy(true);
     try {
       const { supabase } = await import('@/client/supabase');
-      const { error } = await supabase.functions.invoke('delete-account', { body: {} });
+      const { error } = await supabase.functions.invoke('delete-account', {
+        body: {},
+      });
       if (error) throw new Error('Could not delete the account. Contact support.');
       await signOut();
       router.replace('/');
@@ -127,12 +155,19 @@ export default function SettingsScreen() {
         <Text className="mb-1.5 text-sm font-medium text-foreground">Café name</Text>
         <TextInput
           value={name}
-          onChangeText={setName}
+          onChangeText={(v) => {
+            setName(v);
+            setNameNote('');
+          }}
+          maxLength={60}
+          returnKeyType="done"
+          onSubmitEditing={saveName}
           className="rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground"
         />
         <View className="mt-2">
           <Btn label="Save name" size="sm" variant="secondary" loading={busy} onPress={saveName} />
         </View>
+        {nameNote ? <Text className="mt-2 text-xs text-muted-foreground">{nameNote}</Text> : null}
       </Card>
 
       <SectionTitle>Weekly routine</SectionTitle>
@@ -202,7 +237,7 @@ export default function SettingsScreen() {
               <PressScale
                 key={o.min}
                 onPress={() => patchSettings({ second_reminder_min: o.min })}
-                accessibilityState={{ selected: on }}
+                aria-selected={on}
                 className={`flex-1 items-center rounded-lg py-2 ${
                   on ? 'bg-primary' : 'border border-border bg-card'
                 }`}
@@ -224,7 +259,9 @@ export default function SettingsScreen() {
           <View className="flex-row items-center gap-2">
             <PressScale
               onPress={() =>
-                patchSettings({ max_shift_hours: Math.max(2, (settings?.max_shift_hours ?? 8) - 1) })
+                patchSettings({
+                  max_shift_hours: Math.max(2, (settings?.max_shift_hours ?? 8) - 1),
+                })
               }
               className="h-7 w-7 items-center justify-center rounded-full border border-border"
             >
@@ -235,7 +272,9 @@ export default function SettingsScreen() {
             </Text>
             <PressScale
               onPress={() =>
-                patchSettings({ max_shift_hours: Math.min(14, (settings?.max_shift_hours ?? 8) + 1) })
+                patchSettings({
+                  max_shift_hours: Math.min(14, (settings?.max_shift_hours ?? 8) + 1),
+                })
               }
               className="h-7 w-7 items-center justify-center rounded-full border border-border"
             >
@@ -264,6 +303,13 @@ export default function SettingsScreen() {
             </PressScale>
           ))}
         </View>
+        {settings?.channel === 'text' ? (
+          <Text className="mt-2 text-[11px] leading-4 text-muted-foreground">
+            Texts go to people with a phone number on their profile. Until text messaging is
+            switched on for your café, ShiftCup sends these by email instead.
+          </Text>
+        ) : null}
+        {routineNote ? <Text className="mt-2 text-xs text-destructive">{routineNote}</Text> : null}
       </Card>
 
       <SectionTitle>Opening hours</SectionTitle>
@@ -293,6 +339,11 @@ export default function SettingsScreen() {
             );
           })}
         </View>
+        {hoursNote ? <Text className="mt-2 text-xs text-destructive">{hoursNote}</Text> : null}
+        <Text className="mt-3 text-[11px] leading-4 text-muted-foreground">
+          Shifts come from the coverage blocks below. If you change your hours, adjust the blocks to
+          match.
+        </Text>
       </Card>
 
       <SectionTitle>Coverage blocks</SectionTitle>
@@ -314,7 +365,9 @@ export default function SettingsScreen() {
                 </Pressable>
               </View>
               {dayBlocks.length === 0 ? (
-                <Text className="text-xs text-muted-foreground">No blocks. Add one to cover this day.</Text>
+                <Text className="text-xs text-muted-foreground">
+                  No blocks. Add one to cover this day.
+                </Text>
               ) : (
                 <View className="gap-1.5">
                   {dayBlocks.map((b) => (
@@ -381,10 +434,7 @@ export default function SettingsScreen() {
       <View className="gap-2">
         <Text className="text-xs text-muted-foreground">Signed in as {profile?.email}</Text>
         <Btn label="Sign out" variant="ghost" onPress={() => signOut()} />
-        <PressScale
-          onPress={() => setDeleteOpen(true)}
-          className="mt-2 items-center py-2"
-        >
+        <PressScale onPress={() => setDeleteOpen(true)} className="mt-2 items-center py-2">
           <Text className="text-sm font-semibold text-destructive">Delete my account</Text>
         </PressScale>
       </View>
@@ -407,7 +457,12 @@ export default function SettingsScreen() {
             This removes your sign-in and your café data. Your team will lose access. This cannot be
             undone.
           </Text>
-          <Btn label="Yes, delete my account" variant="danger" loading={busy} onPress={removeAccount} />
+          <Btn
+            label="Yes, delete my account"
+            variant="danger"
+            loading={busy}
+            onPress={removeAccount}
+          />
           <Btn label="Keep my account" variant="ghost" onPress={() => setDeleteOpen(false)} />
         </View>
       </Sheet>
@@ -445,9 +500,19 @@ function BlockSheet({
     setBusy(true);
     try {
       if (state.editing) {
-        await updateBlock(state.editing.id, { start_min: start, end_min: end, rule });
+        await updateBlock(state.editing.id, {
+          start_min: start,
+          end_min: end,
+          rule,
+        });
       } else {
-        await addBlock({ cafeId: cafe.id, weekday: state.weekday, startMin: start, endMin: end, rule });
+        await addBlock({
+          cafeId: cafe.id,
+          weekday: state.weekday,
+          startMin: start,
+          endMin: end,
+          rule,
+        });
       }
       await onSaved();
     } finally {
@@ -456,11 +521,7 @@ function BlockSheet({
   };
 
   return (
-    <Sheet
-      visible={state.open}
-      onClose={onClose}
-      title={`${DAY_SHORT[state.weekday]} block`}
-    >
+    <Sheet visible={state.open} onClose={onClose} title={`${DAY_SHORT[state.weekday]} block`}>
       <View className="gap-3 pb-4">
         <View className="flex-row gap-2">
           <View className="flex-1">
