@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -34,7 +35,17 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
-import { DAY_LONG, DAY_SHORT, fmtHours, fmtRange, fmtWeekLabel, weekdayOf } from '@/lib/dates';
+import {
+  DAY_LONG,
+  DAY_SHORT,
+  fmtDateTime,
+  fmtHours,
+  fmtMoney,
+  fmtRange,
+  fmtWeekLabel,
+  weekdayOf,
+} from '@/lib/dates';
+import { isReachable } from '@/lib/invite';
 import { checkEligibility, fillOpenSlots, weekMinutes } from '@/lib/scheduling';
 import {
   JOB_ROLES,
@@ -75,9 +86,12 @@ export default function ScheduleScreen() {
   const [slotSheet, setSlotSheet] = useState<{ blockId: string; slot: SlotKind } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
-  const [publishWarnOpen, setPublishWarnOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [showAllGaps, setShowAllGaps] = useState(false);
+  // Set after a fill: the slots still open then are ones nobody is free for, so offering
+  // to fill them again would do nothing. Cleared as soon as the week changes.
+  const [fillDone, setFillDone] = useState('');
 
   const status = useMemo(() => {
     if (!data.published) return 'Draft';
@@ -125,7 +139,14 @@ export default function ScheduleScreen() {
       }));
       const filled = fillOpenSlots(blocks, data.engine.assignments, data.engine);
       await persist(toRows(filled));
-      setMessage('Filled every open slot it could. Nothing you set by hand was changed.');
+      const assigned = filled.filter((a) => a.employeeId).length;
+      const added = assigned - data.assignments.filter((a) => a.employee_id).length;
+      setFillDone(`${weekStart}:${assigned}`);
+      setMessage(
+        added > 0
+          ? `Filled ${added} ${added === 1 ? 'slot' : 'slots'}. Nothing you set by hand was changed.`
+          : 'Nobody is free for the slots still open. Tap Fix on a gap to choose someone, or leave it open.',
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not fill the slots.');
     } finally {
@@ -183,29 +204,51 @@ export default function ScheduleScreen() {
 
   const issueCount = data.gaps.length + data.clashes.length;
 
-  const runPublish = async (force = false) => {
-    if (!cafe) return;
+  const activeEmployees = data.employees.filter((e) => e.active);
+  const working = activeEmployees.filter((e) =>
+    data.assignments.some((a) => a.employee_id === e.id),
+  );
+  const unreachable = working.filter((e) => !isReachable(e));
+  const hasShifts = data.assignments.some((a) => a.employee_id);
+
+  /** Publishing always goes through one review sheet, so it is never a surprise. */
+  const openReview = () => {
     if (!hasAccess) {
       router.push('/(app)/billing');
       return;
     }
-    if (issueCount > 0 && !force) {
-      setPublishWarnOpen(true);
-      return;
-    }
-    setPublishWarnOpen(false);
+    setMessage('');
+    setReviewOpen(true);
+  };
+
+  const runPublish = async () => {
+    if (!cafe) return;
     setBusy(true);
     setMessage('');
     try {
-      await publishWeek({
+      const result = await publishWeek({
         cafeId: cafe.id,
         weekStart,
         assignments: data.assignments,
-        employeeIds: data.employees.filter((e) => e.active).map((e) => e.id),
+        employeeIds: activeEmployees.map((e) => e.id),
         settings,
       });
       await data.reload();
-      setMessage('Published. Reminders are queued.');
+      setReviewOpen(false);
+      const told = result.republished
+        ? result.notified === 0
+          ? 'Published. Nobody’s own shifts changed, so no new messages went out.'
+          : `Published. ${result.notified} ${
+              result.notified === 1 ? 'person whose shifts changed was' : 'people whose shifts changed were'
+            } told.`
+        : 'Published. Everyone working has been sent their shifts.';
+      setMessage(
+        unreachable.length === 0
+          ? told
+          : `${told} ${unreachable.map((e) => e.name).join(', ')} ${
+              unreachable.length === 1 ? 'has' : 'have'
+            } not joined, so share the schedule with them yourself.`,
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not publish.');
     } finally {
@@ -379,9 +422,8 @@ export default function ScheduleScreen() {
             {offset === 0 || offset === 1 ? ` · ${fmtWeekLabel(weekStart)}` : ''}
           </Text>
           <Text
-            className={`text-[11px] font-semibold ${
-              status === 'Published' ? 'text-solo-ink' : 'text-muted-foreground'
-            }`}
+            className="text-[11px] font-semibold text-muted-foreground"
+            style={status === 'Published' ? { color: C.soloInk } : undefined}
           >
             {status}
           </Text>
@@ -405,20 +447,100 @@ export default function ScheduleScreen() {
         </View>
       ) : null}
 
-      <Btn
-        label={
-          status === 'Published'
-            ? 'Published, nothing new to send'
-            : status === 'Changed since published'
-              ? 'Publish changes'
-              : 'Approve and publish'
-        }
-        loading={busy}
-        onPress={() => runPublish()}
-        disabled={data.assignments.length === 0 || status === 'Published'}
-      />
+      <Card>
+        {status === 'Published' ? (
+          <>
+            <View className="flex-row items-center gap-2">
+              <CheckCircle2 size={18} color={C.soloInk} />
+              <Text className="flex-1 text-base font-semibold text-foreground">Published</Text>
+            </View>
+            <Text className="mt-1 text-sm text-muted-foreground">
+              {data.published
+                ? `Sent ${fmtDateTime(data.published.published_at)}. Your team sees this week in the app.`
+                : 'Your team sees this week in the app.'}
+              {data.gaps.length > 0
+                ? ` ${data.gaps.length} ${data.gaps.length === 1 ? 'slot is' : 'slots are'} still open.`
+                : ''}
+            </Text>
+            <Text className="mt-1 text-xs text-muted-foreground">
+              Change any shift below and you can publish again.
+            </Text>
+          </>
+        ) : !hasShifts ? (
+          <>
+            <Text className="text-base font-semibold text-foreground">Nothing scheduled yet</Text>
+            <Text className="mb-3 mt-1 text-sm text-muted-foreground">
+              ShiftCup fills the week from everyone’s usual week. You check it, then publish.
+            </Text>
+            <Btn
+              label="Build the draft"
+              icon={<Wand2 size={16} color={C.cream} />}
+              loading={busy}
+              onPress={runFill}
+            />
+            <View className="mt-2">
+              <Btn
+                label="Copy last week instead"
+                variant="ghost"
+                size="sm"
+                icon={<Copy size={14} color={C.pine} />}
+                onPress={() => runCopyLastWeek()}
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            <Text className="text-base font-semibold text-foreground">
+              {status === 'Changed since published'
+                ? 'Changed since you published'
+                : issueCount === 0
+                  ? 'Ready to publish'
+                  : `Draft with ${issueCount} ${issueCount === 1 ? 'thing' : 'things'} to check`}
+            </Text>
+            <Text className="mb-3 mt-1 text-sm text-muted-foreground">
+              {status === 'Changed since published'
+                ? 'Your team still sees the version you published before.'
+                : `${fmtHours(data.totalMinutes)} across ${working.length} ${
+                    working.length === 1 ? 'person' : 'people'
+                  }, ${fmtMoney(data.totalWages)} in wages. Your team sees nothing until you publish.`}
+            </Text>
+            <Btn
+              label={status === 'Changed since published' ? 'Review and publish changes' : 'Review and publish'}
+              loading={busy && reviewOpen}
+              onPress={openReview}
+            />
+            {data.gaps.length > 0 &&
+            fillDone !== `${weekStart}:${data.assignments.filter((a) => a.employee_id).length}` ? (
+              <View className="mt-2">
+                <Btn
+                  label={`Fill ${data.gaps.length === 1 ? 'the open slot' : `the ${data.gaps.length} open slots`} for me`}
+                  variant="secondary"
+                  size="sm"
+                  icon={<Wand2 size={14} color={C.pine} />}
+                  loading={busy && !reviewOpen}
+                  onPress={runFill}
+                />
+              </View>
+            ) : null}
+          </>
+        )}
+        {message ? <Text className="mt-3 text-xs text-muted-foreground">{message}</Text> : null}
+      </Card>
 
-      {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
+      {data.changeRequests.length > 0 ? (
+        <PressScale
+          onPress={() => router.push('/(app)/(manager)/today')}
+          className="mt-3 flex-row items-center gap-2 rounded-xl px-4 py-3"
+          style={{ backgroundColor: '#FBF6E9' }}
+        >
+          <Text className="flex-1 text-xs font-semibold" style={{ color: '#6E470C' }}>
+            {data.changeRequests.length === 1
+              ? '1 availability request is waiting for you'
+              : `${data.changeRequests.length} availability requests are waiting for you`}
+          </Text>
+          <ChevronRight size={14} color="#8A5A12" />
+        </PressScale>
+      ) : null}
 
       {data.gaps.length > 0 ? (
         <View className="mt-4 gap-2">
@@ -647,13 +769,6 @@ export default function ScheduleScreen() {
 
       <SectionTitle>Week tools</SectionTitle>
       <View className="gap-2">
-        <Btn
-          label="Fill open slots"
-          variant="secondary"
-          icon={<Wand2 size={16} color={C.pine} />}
-          onPress={runFill}
-          loading={busy}
-        />
         <View className="flex-row gap-2">
           <View className="flex-1">
             <Btn
@@ -731,7 +846,11 @@ export default function ScheduleScreen() {
             <Notice
               tone="danger"
               title={`${sheetCoverName ?? 'They'} asked for cover`}
-              body="Pick someone below to take over, or keep them on if they can make it after all."
+              body={`${
+                sheetCovers.find((c) => c.note)?.note
+                  ? `“${sheetCovers.find((c) => c.note)?.note}” `
+                  : ''
+              }Pick someone below to take over, or keep them on if they can make it after all.`}
               action={
                 <View className="mt-2">
                   <Btn
@@ -829,20 +948,63 @@ export default function ScheduleScreen() {
       </Sheet>
 
       <Sheet
-        visible={publishWarnOpen}
-        onClose={() => setPublishWarnOpen(false)}
-        title="Publish with open slots?"
+        visible={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        title={`Publish ${fmtWeekLabel(weekStart)}?`}
       >
         <View className="gap-3 pb-4">
+          <View className="rounded-xl bg-muted/60 px-3.5 py-1">
+            <ReviewRow
+              label="Shifts"
+              value={`${fmtHours(data.totalMinutes)} across ${working.length} ${
+                working.length === 1 ? 'person' : 'people'
+              }`}
+            />
+            <ReviewRow label="Wages" value={fmtMoney(data.totalWages)} divider />
+            <ReviewRow
+              label="Open slots"
+              value={data.gaps.length === 0 ? 'None' : String(data.gaps.length)}
+              warn={data.gaps.length > 0}
+              divider
+            />
+            {data.clashes.length > 0 ? (
+              <ReviewRow
+                label="No longer fit their shift"
+                value={String(data.clashes.length)}
+                warn
+                divider
+              />
+            ) : null}
+          </View>
           <Text className="text-sm text-muted-foreground">
-            {data.gaps.length} {data.gaps.length === 1 ? 'slot is' : 'slots are'} still open
-            {data.clashes.length > 0
-              ? ` and ${data.clashes.length} ${data.clashes.length === 1 ? 'person no longer fits their shift' : 'people no longer fit their shifts'}`
-              : ''}
-            . Your team will see the week as it is now.
+            {data.published
+              ? 'Only people whose own shifts changed are told again. Everyone sees the new week in the app.'
+              : `${working.length === 1 ? 'The 1 person' : `All ${working.length} people`} working ${
+                  working.length === 1 ? 'gets' : 'get'
+                } their shifts by ${settings.channel === 'text' ? 'text' : 'email'} and in the app, then a reminder before each shift.`}
           </Text>
-          <Btn label="Publish anyway" loading={busy} onPress={() => runPublish(true)} />
-          <Btn label="Fix them first" variant="ghost" onPress={() => setPublishWarnOpen(false)} />
+          {unreachable.length > 0 ? (
+            <Notice
+              tone="warn"
+              title={`${unreachable.map((e) => e.name).join(', ')} will not get a message`}
+              body="They have not joined ShiftCup and have no email on file. Share the schedule with them yourself, or send their invite from Team."
+            />
+          ) : null}
+          {issueCount > 0 ? (
+            <Text className="text-sm text-destructive">
+              Your team will see the week as it is now, open slots included.
+            </Text>
+          ) : null}
+          <Btn
+            label={issueCount > 0 ? 'Publish anyway' : 'Publish to my team'}
+            loading={busy}
+            onPress={runPublish}
+          />
+          <Btn
+            label={issueCount > 0 ? 'Fix them first' : 'Not yet'}
+            variant="ghost"
+            onPress={() => setReviewOpen(false)}
+          />
         </View>
       </Sheet>
 
@@ -875,6 +1037,34 @@ export default function ScheduleScreen() {
         </Text>
       </View>
     </Screen>
+  );
+}
+
+function ReviewRow({
+  label,
+  value,
+  warn = false,
+  divider = false,
+}: {
+  label: string;
+  value: string;
+  warn?: boolean;
+  divider?: boolean;
+}) {
+  return (
+    <View
+      className={`flex-row items-center justify-between py-2.5 ${
+        divider ? 'border-t border-border/70' : ''
+      }`}
+    >
+      <Text className="text-sm text-muted-foreground">{label}</Text>
+      <Text
+        className={`text-sm font-semibold ${warn ? 'text-destructive' : 'text-foreground'}`}
+        style={{ fontVariant: ['tabular-nums'] }}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 

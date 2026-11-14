@@ -5,7 +5,7 @@ export type AvailKind = 'any' | 'none' | 'window';
 export type ReqStatus = 'waiting' | 'answered' | 'unavailable';
 export type SubStatus = 'trial' | 'active' | 'past_due' | 'ended';
 export type Channel = 'email' | 'text';
-export type ReminderKind = 'request' | 'published' | 'evening' | 'soon' | 'renewal';
+export type ReminderKind = 'request' | 'published' | 'evening' | 'soon' | 'renewal' | 'notice';
 export type ReminderState = 'queued' | 'sent' | 'cancelled';
 
 export const JOB_ROLES = ['barista', 'scooper', 'back_of_house'] as const;
@@ -75,6 +75,26 @@ export type EmployeeSelf = {
   max_hours: number;
   active: boolean;
   user_id: string | null;
+  /** Their standing availability, Monday first. Read-only here: changes go through a request. */
+  usual_week?: UsualDay[] | null;
+};
+
+export type ChangeScope = 'usual' | 'week';
+export type ChangeStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
+
+/** An employee asking to change when they can work. The manager approves or declines. */
+export type AvailabilityRequest = {
+  id: string;
+  cafe_id: string;
+  employee_id: string;
+  /** 'usual' changes every week from now on; 'week' changes only `week_start`. */
+  scope: ChangeScope;
+  week_start: string | null;
+  days: UsualDay[];
+  note: string | null;
+  status: ChangeStatus;
+  created_at: string;
+  decided_at: string | null;
 };
 
 export type StoreHour = {

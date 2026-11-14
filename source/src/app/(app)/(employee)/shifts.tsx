@@ -8,6 +8,7 @@ import {
   Btn,
   Card,
   EmptyState,
+  Field,
   Notice,
   PressScale,
   Screen,
@@ -126,6 +127,7 @@ export default function MyShiftsScreen() {
   const [loading, setLoading] = useState(true);
   const [confirm, setConfirm] = useState<Shift | null>(null);
   const [busy, setBusy] = useState(false);
+  const [coverNote, setCoverNote] = useState('');
   const [message, setMessage] = useState('');
   const [needsAvailability, setNeedsAvailability] = useState(false);
   const [tab, setTab] = useState<'mine' | 'team'>('mine');
@@ -190,11 +192,13 @@ export default function MyShiftsScreen() {
           employeeId: employee.id,
           weekStart: confirm.week_start,
           weekday: confirm.weekday,
+          note: coverNote,
         });
       }
       await load();
       setConfirm(null);
-      setMessage('Your manager has been told. Keep an eye on your shifts.');
+      setCoverNote('');
+      setMessage('Your manager has been told. You stay on the shift until they change it.');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not send that request.');
     } finally {
@@ -343,8 +347,11 @@ export default function MyShiftsScreen() {
                 />
               ) : (
                 <Text className="text-sm text-muted-foreground">
-                  Not published yet. Your manager publishes on{' '}
-                  {DAY_LONG[settings?.publish_weekday ?? 4]}.
+                  {w.week === currentWeekStart()
+                    ? 'No schedule was published for this week.'
+                    : `Not published yet. Your manager publishes on ${
+                        DAY_LONG[settings?.publish_weekday ?? 4]
+                      }.`}
                 </Text>
               )}
             </View>
@@ -393,6 +400,13 @@ export default function MyShiftsScreen() {
             Your manager will see this shift as a gap and find someone else. You stay on it until
             they change it.
           </Text>
+          <Field
+            label="Reason (optional)"
+            placeholder="Anything your manager should know"
+            value={coverNote}
+            onChangeText={setCoverNote}
+            maxLength={200}
+          />
           <Btn label="Tell my manager" variant="danger" loading={busy} onPress={askCover} />
           <Btn label="Never mind" variant="ghost" onPress={() => setConfirm(null)} />
         </View>

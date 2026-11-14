@@ -1,4 +1,5 @@
 import {
+  DAY_SHORT,
   addDays,
   availabilityDueDate,
   dateAtMinutes,
@@ -111,25 +112,33 @@ export function buildPublishedReminders(params: {
   assignments: EngineAssignment[];
   employeeIds: string[];
   channel: Channel;
+  /** True when the week was already published and this person's shifts are different now. */
+  changed?: boolean;
 }): ReminderDraft[] {
   const sendAt = new Date().toISOString();
   const out: ReminderDraft[] = [];
   for (const employeeId of params.employeeIds) {
     const runs = allShiftRuns(params.assignments, employeeId);
-    if (runs.length === 0) continue;
+    // First publish: people with no shifts hear nothing. After a change, someone taken
+    // off the week has to be told, or they will turn up.
+    if (runs.length === 0 && !params.changed) continue;
     const lines = runs.map(
       (r) =>
-        `${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][r.weekday]} ${fmtTime(
-          r.startMin,
-        )} to ${fmtTime(r.endMin)} (${ROLE_NOUN[r.slot] ?? 'shift'})`,
+        `${DAY_SHORT[r.weekday]} ${fmtTime(r.startMin)} to ${fmtTime(r.endMin)} (${
+          ROLE_NOUN[r.slot] ?? 'shift'
+        })`,
     );
+    const body =
+      runs.length === 0
+        ? `Your schedule changed. You now have no shifts the week of ${fmtWeekLabel(params.weekStart)}.`
+        : `${params.changed ? 'Your schedule changed. It is now:' : 'Your schedule is ready.'} ${lines.join('; ')}.`;
     out.push({
       employee_id: employeeId,
       week_start: params.weekStart,
-      weekday: runs[0].weekday,
+      weekday: runs[0]?.weekday ?? 0,
       kind: 'published',
       send_at: sendAt,
-      body: `Your schedule is ready. ${lines.join('; ')}.`,
+      body,
       channel: params.channel,
     });
   }
