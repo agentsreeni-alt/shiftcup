@@ -50,6 +50,7 @@ These are public client values. Server secrets live in Supabase Edge Function se
 | `STRIPE_SECRET_KEY` | `stripe-checkout`, `stripe-portal` |
 | `STRIPE_WEBHOOK_SECRET` | `stripe-webhook` |
 | `RESEND_API_KEY` | `send-reminders` |
+| `REMINDER_FROM_EMAIL` | `send-reminders`: the sender, e.g. `ShiftCup <info@your-domain.com>`. Must be on a domain verified in Resend |
 
 ## Backend
 
@@ -64,6 +65,8 @@ supabase functions deploy join-cafe
 supabase functions deploy delete-account
 supabase functions deploy send-reminders
 ```
+
+`00010_availability_requests.sql` adds availability change requests (employees ask, the manager approves). Run `supabase db push` and redeploy `send-reminders` **before** deploying the website. The app still loads on an older database, but employees cannot see their usual week or send a request until the migration is in.
 
 `00003_shiftcup_reminder_cron.sql` schedules a `pg_cron` job that calls `send-reminders` every minute. It reads `project_url` and `publishable_key` from `vault.decrypted_secrets`, so set those first:
 

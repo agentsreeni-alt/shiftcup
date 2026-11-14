@@ -7,7 +7,7 @@ const supabase = createClient(
 
 const FROM = Deno.env.get('REMINDER_FROM_EMAIL') ?? 'ShiftCup <shifts@shiftcup.app>';
 
-type Kind = 'request' | 'published' | 'evening' | 'soon' | 'renewal';
+type Kind = 'request' | 'published' | 'evening' | 'soon' | 'renewal' | 'notice';
 
 type Row = {
   id: string;
@@ -43,19 +43,39 @@ function subjectFor(kind: Kind, cafeName: string): string {
       return `${cafeName}: you're working tomorrow`;
     case 'soon':
       return `${cafeName}: your shift starts soon`;
+    case 'notice':
+      return `${cafeName}: an update from your manager`;
     default:
       return `${cafeName}: ShiftCup`;
   }
 }
 
-async function sendEmail(to: string, subject: string, text: string): Promise<Outcome> {
+// The reminder id doubles as Resend's idempotency key: if a run is retried
+// after Resend already accepted the message, the employee is not emailed twice.
+async function sendEmail(
+  to: string,
+  subject: string,
+  text: string,
+  reminderId: string,
+): Promise<Outcome> {
   const key = Deno.env.get('RESEND_API_KEY');
   if (!key) return 'retry';
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, text }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': `reminder-${reminderId}`,
+      },
+      body: JSON.stringify({ from: FROM, to: [to], subject, text }),
+    });
+  } catch (err) {
+    // Network failure: nothing is known about delivery, so try again next run.
+    console.error('resend unreachable', err instanceof Error ? err.message : String(err));
+    return 'retry';
+  }
   if (res.ok) return 'sent';
   console.error('resend failed', res.status, (await res.text()).slice(0, 200));
   // Rate limits and server errors are temporary; other 4xx (bad address) are not.
@@ -94,7 +114,12 @@ async function deliver(row: Row, emailReady: boolean, smsReady: boolean): Promis
     if (outcome === 'sent') return outcome;
   }
   if (email && emailReady && !isReservedAddress(email)) {
-    const emailOutcome = await sendEmail(email, subjectFor(row.kind, cafeName), row.body);
+    const emailOutcome = await sendEmail(
+      email,
+      subjectFor(row.kind, cafeName),
+      row.body,
+      row.id,
+    );
     if (emailOutcome !== 'drop' || outcome !== 'retry') outcome = emailOutcome;
   }
   return outcome;

@@ -1,5 +1,5 @@
 import { supabase } from '@/client/supabase';
-import { addDays, startOfWeek, toISODate } from '@/lib/dates';
+import { addDays, fmtWeekLabel, startOfWeek, toISODate } from '@/lib/dates';
 import {
   buildPublishedReminders,
   buildRequestReminders,
@@ -15,6 +15,7 @@ import {
 import type {
   Assignment,
   Availability,
+  AvailabilityRequest,
   Cafe,
   CafeSettings,
   Channel,
@@ -27,6 +28,7 @@ import type {
   Reminder,
   RequestStatus,
   StoreHour,
+  UsualDay,
   WeeklyRequest,
 } from '@/lib/types';
 
@@ -71,12 +73,19 @@ export async function loadCafeForManager(userId: string): Promise<Cafe | null> {
 }
 
 export async function loadEmployeeSelf(): Promise<EmployeeSelf | null> {
+  const base = 'id, cafe_id, name, roles, can_work_alone, max_hours, active, user_id';
   const { data, error } = await supabase
     .from('my_employee_profile')
-    .select('id, cafe_id, name, roles, can_work_alone, max_hours, active, user_id')
+    .select(`${base}, usual_week`)
     .maybeSingle();
-  if (error) throw error;
-  return (data as EmployeeSelf) ?? null;
+  if (!error) return (data as EmployeeSelf) ?? null;
+  // Older databases do not expose usual_week to employees yet. Sign-in must still work.
+  const { data: basic, error: basicError } = await supabase
+    .from('my_employee_profile')
+    .select(base)
+    .maybeSingle();
+  if (basicError) throw basicError;
+  return (basic as EmployeeSelf) ?? null;
 }
 
 export async function loadEmployeeCafe(): Promise<{
@@ -295,7 +304,9 @@ async function replaceReminders(
     .delete()
     .eq('cafe_id', cafeId)
     .eq('week_start', weekStart)
-    .eq('state', 'queued');
+    .eq('state', 'queued')
+    // Only what publishing queues. A pending availability ask or notice is left alone.
+    .in('kind', ['published', 'evening', 'soon']);
   if (deleteError) throw deleteError;
 
   if (drafts.length === 0) return;
@@ -314,14 +325,39 @@ async function replaceReminders(
   if (error) throw error;
 }
 
+type SnapshotRow = {
+  weekday: number;
+  block_id: string;
+  slot: Assignment['slot'];
+  employee_id: string | null;
+  start_min: number;
+  end_min: number;
+};
+
+/** One person's week as a comparable string, so two versions of a week can be compared. */
+function shiftsKey(rows: SnapshotRow[], employeeId: string): string {
+  return rows
+    .filter((r) => r.employee_id === employeeId)
+    .map((r) => `${r.weekday}:${r.start_min}-${r.end_min}:${r.slot}`)
+    .sort()
+    .join('|');
+}
+
+/**
+ * Publishes the week and queues its messages. Returns how many people were told.
+ *
+ * The first publish tells everyone who is working. Publishing again tells only the people
+ * whose own shifts changed (including anyone taken off the week), so nobody is emailed a
+ * schedule they already have.
+ */
 export async function publishWeek(params: {
   cafeId: string;
   weekStart: string;
   assignments: Assignment[];
   employeeIds: string[];
   settings: CafeSettings;
-}): Promise<void> {
-  const snapshot = params.assignments.map((a) => ({
+}): Promise<{ notified: number; republished: boolean }> {
+  const snapshot: SnapshotRow[] = params.assignments.map((a) => ({
     weekday: a.weekday,
     block_id: a.block_id,
     slot: a.slot,
@@ -329,6 +365,10 @@ export async function publishWeek(params: {
     start_min: a.start_min,
     end_min: a.end_min,
   }));
+
+  const before = await loadPublished(params.cafeId, params.weekStart);
+  const previous: SnapshotRow[] | null =
+    before && Array.isArray(before.snapshot) ? (before.snapshot as SnapshotRow[]) : null;
 
   const { error } = await supabase.from('published_schedules').upsert(
     {
@@ -350,24 +390,32 @@ export async function publishWeek(params: {
     endMin: a.end_min,
   }));
 
-  const drafts = [
-    ...buildPublishedReminders({
-      weekStart: params.weekStart,
-      assignments: engineAssignments,
-      employeeIds: params.employeeIds,
-      channel: params.settings.channel,
-    }),
-    ...buildShiftReminders({
-      weekStart: params.weekStart,
-      assignments: engineAssignments,
-      employeeIds: params.employeeIds,
-      eveningMin: params.settings.evening_reminder_min,
-      secondMin: params.settings.second_reminder_min,
-      channel: params.settings.channel,
-    }),
-  ];
+  const changedIds = previous
+    ? params.employeeIds.filter((id) => shiftsKey(previous, id) !== shiftsKey(snapshot, id))
+    : params.employeeIds;
 
-  await replaceReminders(params.cafeId, params.weekStart, drafts);
+  const summaries = buildPublishedReminders({
+    weekStart: params.weekStart,
+    assignments: engineAssignments,
+    employeeIds: changedIds,
+    channel: params.settings.channel,
+    changed: Boolean(previous),
+  });
+
+  // Shift reminders whose moment has already passed (publishing mid-week) would all go
+  // out at once, about shifts that are over. Only future ones are queued.
+  const now = Date.now();
+  const shiftReminders = buildShiftReminders({
+    weekStart: params.weekStart,
+    assignments: engineAssignments,
+    employeeIds: params.employeeIds,
+    eveningMin: params.settings.evening_reminder_min,
+    secondMin: params.settings.second_reminder_min,
+    channel: params.settings.channel,
+  }).filter((d) => new Date(d.send_at).getTime() > now);
+
+  await replaceReminders(params.cafeId, params.weekStart, [...summaries, ...shiftReminders]);
+  return { notified: summaries.length, republished: Boolean(previous) };
 }
 
 export async function sendWeeklyRequest(params: {
@@ -838,6 +886,8 @@ export async function loadMyReminders(): Promise<Reminder[]> {
       'id, cafe_id, employee_id, week_start, weekday, kind, send_at, body, channel, state, sent_at',
     )
     .eq('state', 'queued')
+    // Shift reminders only: one-off notices and schedule summaries are not "next reminder".
+    .in('kind', ['evening', 'soon'])
     .order('send_at', { ascending: true })
     .limit(20);
   if (error) throw error;
@@ -956,4 +1006,141 @@ export async function loadMyPublishedWeek(weekStart: string): Promise<PublishedS
     .maybeSingle();
   if (error) throw error;
   return (data as PublishedSchedule) ?? null;
+}
+
+// ---------- availability change requests ----------
+
+const REQUEST_COLUMNS =
+  'id, cafe_id, employee_id, scope, week_start, days, note, status, created_at, decided_at';
+
+/** Manager side: requests waiting for a decision. Empty if the feature is not installed yet. */
+export async function loadPendingAvailabilityRequests(
+  cafeId: string,
+): Promise<AvailabilityRequest[]> {
+  const { data, error } = await supabase
+    .from('availability_requests')
+    .select(REQUEST_COLUMNS)
+    .eq('cafe_id', cafeId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(50);
+  // The rest of the week must still load on a database without this table.
+  if (error) return [];
+  return Array.isArray(data) ? (data as AvailabilityRequest[]) : [];
+}
+
+/** Employee side: my recent requests, newest first. */
+export async function loadMyAvailabilityRequests(): Promise<AvailabilityRequest[]> {
+  const { data, error } = await supabase
+    .from('availability_requests')
+    .select(REQUEST_COLUMNS)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  if (error) throw error;
+  return Array.isArray(data) ? (data as AvailabilityRequest[]) : [];
+}
+
+/**
+ * Employee side: ask the manager for a change. A newer request replaces an older one that
+ * is still waiting for the same thing, so the manager only ever sees the latest ask.
+ */
+export async function createAvailabilityRequest(params: {
+  cafeId: string;
+  employeeId: string;
+  scope: 'usual' | 'week';
+  weekStart: string | null;
+  days: UsualDay[];
+  note?: string;
+}): Promise<void> {
+  let stale = supabase
+    .from('availability_requests')
+    .update({ status: 'cancelled' })
+    .eq('employee_id', params.employeeId)
+    .eq('status', 'pending')
+    .eq('scope', params.scope);
+  if (params.scope === 'week' && params.weekStart) {
+    stale = stale.eq('week_start', params.weekStart);
+  }
+  const { error: staleError } = await stale;
+  if (staleError) throw staleError;
+
+  const { error } = await supabase.from('availability_requests').insert({
+    cafe_id: params.cafeId,
+    employee_id: params.employeeId,
+    scope: params.scope,
+    week_start: params.scope === 'week' ? params.weekStart : null,
+    days: params.days,
+    note: params.note?.trim() || null,
+  });
+  if (error) throw error;
+}
+
+/** Employee side: withdraw a request that is still waiting. */
+export async function cancelAvailabilityRequest(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('availability_requests')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
+    .eq('status', 'pending');
+  if (error) throw error;
+}
+
+/**
+ * Manager side: approve or decline. Approving applies the change first (to the person's
+ * usual week, or to the one week they asked about) and only then closes the request, so a
+ * failure part-way leaves it waiting and safe to approve again.
+ */
+export async function decideAvailabilityRequest(
+  request: AvailabilityRequest,
+  approve: boolean,
+  channel: Channel,
+): Promise<void> {
+  if (approve) {
+    if (request.scope === 'usual') {
+      await updateEmployee(request.employee_id, { usual_week: request.days });
+    } else if (request.week_start) {
+      const weekStart = request.week_start;
+      await saveAvailabilityRows(
+        request.days.map((d, weekday) => ({
+          cafe_id: request.cafe_id,
+          employee_id: request.employee_id,
+          week_start: weekStart,
+          weekday,
+          kind: d.kind,
+          start_min: d.kind === 'window' ? d.start_min : null,
+          end_min: d.kind === 'window' ? d.end_min : null,
+        })),
+      );
+    }
+  }
+  const { error } = await supabase
+    .from('availability_requests')
+    .update({ status: approve ? 'approved' : 'declined', decided_at: new Date().toISOString() })
+    .eq('id', request.id)
+    .eq('status', 'pending');
+  if (error) throw error;
+
+  // Tell the person. Best effort: the decision stands even if the message cannot be queued.
+  const what =
+    request.scope === 'usual'
+      ? 'your new usual week'
+      : `your change for the week of ${fmtWeekLabel(request.week_start ?? '')}`;
+  await supabase.from('reminders').insert({
+    cafe_id: request.cafe_id,
+    employee_id: request.employee_id,
+    week_start: request.week_start ?? currentWeekStart(),
+    weekday: 0,
+    kind: 'notice',
+    send_at: new Date().toISOString(),
+    body: approve
+      ? `Your manager approved ${what}. It is in ShiftCup now.`
+      : `Your manager could not approve ${what}. Nothing has changed. Talk to them if you need to.`,
+    channel,
+    state: 'queued',
+  });
+}
+
+/** Employee side: answer the manager's weekly ask with "my usual week works". */
+export async function confirmUsualWeek(requestId: string, employeeId: string): Promise<void> {
+  await markAnswered(requestId, employeeId);
 }

@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowRight, Bell, CalendarCheck, Clock, Users } from 'lu
 import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
+import { ChangeRequests } from '@/components/ChangeRequests';
 import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle } from '@/components/kit';
 import { planningWeekStart, publishWeek, saveAssignments, sendWeeklyRequest } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
@@ -311,6 +312,25 @@ export default function TodayScreen() {
         ) : null}
         {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
       </Card>
+
+      {data.changeRequests.length > 0 ? (
+        <>
+          <SectionTitle>
+            {data.changeRequests.length === 1
+              ? '1 request from your team'
+              : `${data.changeRequests.length} requests from your team`}
+          </SectionTitle>
+          <ChangeRequests
+            requests={data.changeRequests}
+            employees={data.employees}
+            channel={settings.channel}
+            onDecided={async (text) => {
+              await data.reload();
+              setMessage(text);
+            }}
+          />
+        </>
+      ) : null}
 
       <SectionTitle>Needs attention</SectionTitle>
       <View className="gap-2">

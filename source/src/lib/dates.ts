@@ -81,7 +81,9 @@ export function fmtHours(min: number): string {
 }
 
 export function fmtMoney(value: number): string {
-  return `$${value.toFixed(2)}`;
+  // Thousands separators by hand: toLocaleString is not dependable on every phone engine.
+  const [whole, cents] = value.toFixed(2).split('.');
+  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${cents}`;
 }
 
 export function fmtDateShort(iso: string): string {

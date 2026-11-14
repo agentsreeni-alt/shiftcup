@@ -7,6 +7,7 @@ import {
   loadBlocks,
   loadCoverRequests,
   loadEmployees,
+  loadPendingAvailabilityRequests,
   loadPublished,
   loadReminders,
   loadRequest,
@@ -24,6 +25,7 @@ import {
 import type {
   Assignment,
   Availability,
+  AvailabilityRequest,
   CafeSettings,
   CoverRequest,
   CoverageBlock,
@@ -45,6 +47,8 @@ export type WeekData = {
   assignments: Assignment[];
   published: PublishedSchedule | null;
   coverRequests: CoverRequest[];
+  /** Availability changes the team has asked for and the manager has not decided yet. */
+  changeRequests: AvailabilityRequest[];
   settings: CafeSettings | null;
   reminders: Reminder[];
   engine: EngineContext;
@@ -70,6 +74,7 @@ export function useWeekData(weekStart: string): WeekData {
   const [coverRequests, setCoverRequests] = useState<CoverRequest[]>([]);
   const [settings, setSettings] = useState<CafeSettings | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [changeRequests, setChangeRequests] = useState<AvailabilityRequest[]>([]);
 
   const load = useCallback(async () => {
     if (!cafeId) {
@@ -78,7 +83,7 @@ export function useWeekData(weekStart: string): WeekData {
     }
     try {
       setError('');
-      const [emps, blks, avail, req, asg, pub, covers, cfg, rem] = await Promise.all([
+      const [emps, blks, avail, req, asg, pub, covers, cfg, rem, changes] = await Promise.all([
         loadEmployees(cafeId),
         loadBlocks(cafeId),
         loadAvailability(cafeId, weekStart),
@@ -88,6 +93,7 @@ export function useWeekData(weekStart: string): WeekData {
         loadCoverRequests(cafeId),
         loadSettings(cafeId),
         loadReminders(cafeId, weekStart),
+        loadPendingAvailabilityRequests(cafeId),
       ]);
       setEmployees(emps);
       setBlocks(blks);
@@ -99,6 +105,7 @@ export function useWeekData(weekStart: string): WeekData {
       setCoverRequests(covers);
       setSettings(cfg);
       setReminders(rem);
+      setChangeRequests(changes);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this week.');
     } finally {
@@ -229,6 +236,7 @@ export function useWeekData(weekStart: string): WeekData {
     assignments,
     published,
     coverRequests,
+    changeRequests,
     settings,
     reminders,
     engine,
