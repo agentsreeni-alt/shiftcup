@@ -12,6 +12,7 @@ import { DAY_SHORT, fmtHours, fmtMoney, fmtWeekLabel } from '@/lib/dates';
 import { fillOpenSlots } from '@/lib/scheduling';
 import type { Assignment, CafeSettings } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
+import { changedSincePublish as changedSincePublish_ } from '@/lib/utils';
 
 const STEPS = ['Ask', 'Draft', 'Fix gaps', 'Publish'];
 
@@ -58,11 +59,15 @@ export default function TodayScreen() {
   const hasDraft = filledCount > 0;
   const issueCount = data.gaps.length + data.clashes.length;
 
+  const changedSincePublish =
+    Boolean(data.published) && changedSincePublish_(data.published?.snapshot, data.assignments);
+
   let step = 0;
   if (hasRequest) step = 1;
   if (hasDraft) step = 2;
   if (hasDraft && issueCount === 0) step = 3;
-  if (data.published && issueCount === 0) step = 4;
+  // A published week stays published, even if the manager accepted some gaps.
+  if (data.published) step = changedSincePublish ? 3 : 4;
 
   const toRows = (list: ReturnType<typeof fillOpenSlots>): Assignment[] =>
     list.map((a) => ({
@@ -170,23 +175,13 @@ export default function TodayScreen() {
         : step === 2
           ? 'Fix the gaps'
           : step === 3
-            ? 'Approve and publish'
+            ? changedSincePublish
+              ? 'Publish changes'
+              : 'Approve and publish'
             : 'View the published week';
 
   // First load: show a spinner, not an empty 'all clear' week.
-
   if (data.loading && !data.settings && !data.error) {
-    // First load: show a spinner, not an empty 'all clear' week.
-    if (data.loading && !data.settings && !data.error) {
-      return (
-        <Screen>
-          <View className="items-center py-32">
-            <ActivityIndicator color={C.pine} />
-          </View>
-        </Screen>
-      );
-    }
-
     return (
       <Screen>
         <View className="items-center py-32">
@@ -234,7 +229,7 @@ export default function TodayScreen() {
       {cafe && !isSample && cafe.subscription_status === 'trial' && hasAccess ? (
         <View className="mb-3 flex-row items-center gap-2 rounded-xl bg-card px-4 py-2.5">
           <Clock size={14} color={C.pine} />
-          <Text className="text-xs font-semibold text-foreground">
+          <Text className="flex-1 text-xs font-semibold text-foreground">
             Free trial: {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
           </Text>
         </View>
@@ -275,8 +270,14 @@ export default function TodayScreen() {
               : step === 2
                 ? `${issueCount} ${issueCount === 1 ? 'thing needs' : 'things need'} a decision before you publish.`
                 : step === 3
-                  ? 'No gaps and no clashes. Publish when you are ready.'
-                  : 'Published. Your team has their shifts.'}
+                  ? changedSincePublish
+                    ? 'You changed the week after publishing. Publish again so your team sees it.'
+                    : 'No gaps and no clashes. Publish when you are ready.'
+                  : data.gaps.length > 0
+                    ? `Published. Your team has their shifts. ${data.gaps.length} ${
+                        data.gaps.length === 1 ? 'slot is' : 'slots are'
+                      } still open.`
+                    : 'Published. Your team has their shifts.'}
         </Text>
         <Btn label={nextLabel} loading={busy} onPress={nextAction} />
         {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}

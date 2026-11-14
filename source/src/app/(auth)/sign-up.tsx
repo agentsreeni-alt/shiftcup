@@ -8,8 +8,10 @@ import { supabase } from '@/client/supabase';
 import { BackButton, Btn } from '@/components/kit';
 import { friendlyAuthError, looksLikeEmail } from '@/lib/auth-messages';
 import { C } from '@/lib/colors';
+import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 export default function SignUpScreen() {
+  const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const mode = params.mode === 'sample' ? 'sample' : 'setup';
@@ -105,7 +107,7 @@ export default function SignUpScreen() {
                       placeholder="At least 6 characters"
                       placeholderTextColor={C.muted}
                       returnKeyType="go"
-                      onSubmitEditing={submit}
+                      onSubmitEditing={onKeyboardSubmit}
                       className="flex-1 px-4 py-3.5 text-base text-foreground"
                     />
                     <Pressable

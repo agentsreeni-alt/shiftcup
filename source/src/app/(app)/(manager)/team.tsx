@@ -177,7 +177,10 @@ export default function TeamScreen() {
       const { data: result, error } = await supabase.functions.invoke('parse-availability', {
         body: { cafe_id: cafe.id, text: paste.trim() },
       });
-      if (error) throw new Error('Reading messages is not available right now. Tap the days on a team card to enter them instead.');
+      if (error)
+        throw new Error(
+          'Reading messages is not available right now. Tap the days on a team card to enter them instead.',
+        );
       if (result?.error) throw new Error(String(result.error));
       setParsed(result as Parsed);
       setParsedFor((result as Parsed).employee_id ?? null);
@@ -291,23 +294,14 @@ export default function TeamScreen() {
   // First load: show a spinner, not an empty 'all clear' week.
 
   if (data.loading && !data.settings && !data.error) {
-
     return (
-
       <Screen>
-
         <View className="items-center py-32">
-
           <ActivityIndicator color={C.pine} />
-
         </View>
-
       </Screen>
-
     );
-
   }
-
 
   return (
     <Screen>
@@ -513,7 +507,7 @@ export default function TeamScreen() {
                       key={r.key}
                       onPress={() => toggleRole(emp, r.key)}
                       className={`rounded-full px-2.5 py-1 ${
-                        on ? 'bg-primary' : 'border border-border bg-card'
+                        on ? 'border border-primary bg-primary' : 'border border-border bg-card'
                       }`}
                     >
                       <Text
@@ -816,7 +810,7 @@ function MemberSheet({
                   )
                 }
                 className={`rounded-full px-3 py-1.5 ${
-                  on ? 'bg-primary' : 'border border-border bg-card'
+                  on ? 'border border-primary bg-primary' : 'border border-border bg-card'
                 }`}
               >
                 <Text
@@ -949,7 +943,7 @@ function DaySheet({
               key={o.key}
               onPress={() => setKind(o.key)}
               className={`flex-1 items-center rounded-xl py-2.5 ${
-                kind === o.key ? 'bg-primary' : 'border border-border bg-card'
+                kind === o.key ? 'border border-primary bg-primary' : 'border border-border bg-card'
               }`}
             >
               <Text

@@ -3,7 +3,17 @@ import { Bell, CalendarX, Clock } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { AppBar, Btn, Card, EmptyState, Notice, PressScale, Screen, SectionTitle, Sheet } from '@/components/kit';
+import {
+  AppBar,
+  Btn,
+  Card,
+  EmptyState,
+  Notice,
+  PressScale,
+  Screen,
+  SectionTitle,
+  Sheet,
+} from '@/components/kit';
 import {
   loadMyRequestStatus,
   planningWeekStart,
@@ -49,7 +59,12 @@ function toShifts(rows: Assignment[]): Shift[] {
   const out: Shift[] = [];
   for (const r of sorted) {
     const last = out[out.length - 1];
-    if (last && last.weekday === r.weekday && last.slot === r.slot && last.end_min === r.start_min) {
+    if (
+      last &&
+      last.weekday === r.weekday &&
+      last.slot === r.slot &&
+      last.end_min === r.start_min
+    ) {
       last.end_min = r.end_min;
       if (r.id) last.ids.push(r.id);
       continue;
@@ -99,7 +114,9 @@ export default function MyShiftsScreen() {
       setReminders(r);
       setSettings(s);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Could not load your shifts. Check your connection.');
+      setMessage(
+        e instanceof Error ? e.message : 'Could not load your shifts. Check your connection.',
+      );
     } finally {
       setLoading(false);
     }
@@ -157,13 +174,19 @@ export default function MyShiftsScreen() {
             >
               <View className="flex-row items-start justify-between">
                 <View className="flex-1">
-                  <Text className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.ink }}>
+                  <Text
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: colors.ink }}
+                  >
                     {a.slot}
                   </Text>
                   <Text className="mt-0.5 text-base font-bold text-foreground">
-                    {DAY_LONG[a.weekday]} · {fmtDayDate(weekStart, a.weekday).replace(/^\w{3} /, '')}
+                    {DAY_LONG[a.weekday]} ·{' '}
+                    {fmtDayDate(weekStart, a.weekday).replace(/^\w{3} /, '')}
                   </Text>
-                  <Text className="text-sm text-foreground">{fmtRange(a.start_min, a.end_min)}</Text>
+                  <Text className="text-sm text-foreground">
+                    {fmtRange(a.start_min, a.end_min)}
+                  </Text>
                 </View>
                 {past ? (
                   <Text className="text-[11px] font-semibold uppercase text-muted-foreground">
@@ -243,12 +266,26 @@ export default function MyShiftsScreen() {
         />
       ) : (
         <View className="gap-5">
-          {renderWeek(`This week · ${fmtWeekLabel(currentWeekStart())}`, currentWeekStart(), thisWeek, true)}
-          {renderWeek(`Next week · ${fmtWeekLabel(weekStartFromOffset(1))}`, weekStartFromOffset(1), nextWeek, false)}
+          {renderWeek(
+            `This week · ${fmtWeekLabel(currentWeekStart())}`,
+            currentWeekStart(),
+            thisWeek,
+            true,
+          )}
+          {renderWeek(
+            `Next week · ${fmtWeekLabel(weekStartFromOffset(1))}`,
+            weekStartFromOffset(1),
+            nextWeek,
+            false,
+          )}
         </View>
       )}
 
-      <Sheet visible={Boolean(confirm)} onClose={() => setConfirm(null)} title="Can't make this shift?">
+      <Sheet
+        visible={Boolean(confirm)}
+        onClose={() => setConfirm(null)}
+        title="Can't make this shift?"
+      >
         <View className="gap-3 pb-4">
           {confirm ? (
             <Card>
@@ -267,11 +304,13 @@ export default function MyShiftsScreen() {
         </View>
       </Sheet>
 
-      <Notice
-        tone="info"
-        title="Reminders"
-        body={`Evening before at ${fmtTime(settings?.evening_reminder_min ?? 1080)}, and ${leadLabel(settings?.second_reminder_min ?? 60)} before your shift.`}
-      />
+      <View className="mt-4">
+        <Notice
+          tone="info"
+          title="Reminders"
+          body={`Evening before at ${fmtTime(settings?.evening_reminder_min ?? 1080)}, and ${leadLabel(settings?.second_reminder_min ?? 60)} before your shift.`}
+        />
+      </View>
     </Screen>
   );
 }

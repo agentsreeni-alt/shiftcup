@@ -8,8 +8,10 @@ import { supabase } from '@/client/supabase';
 import { BackButton, Btn } from '@/components/kit';
 import { looksLikeEmail } from '@/lib/auth-messages';
 import { C } from '@/lib/colors';
+import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 export default function JoinScreen() {
+  const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
   const [code, setCode] = useState(
@@ -142,7 +144,7 @@ export default function JoinScreen() {
                       placeholder="At least 6 characters"
                       placeholderTextColor={C.muted}
                       returnKeyType="go"
-                      onSubmitEditing={submit}
+                      onSubmitEditing={onKeyboardSubmit}
                       className="flex-1 px-4 py-3.5 text-base text-foreground"
                     />
                     <Pressable

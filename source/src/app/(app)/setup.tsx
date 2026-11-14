@@ -17,6 +17,7 @@ import { createCafe, createSampleCafe } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 import { fmtTime } from '@/lib/dates';
+import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 const STEPS = ['Café name', 'Opening hours', 'Your team'];
 
@@ -43,6 +44,7 @@ function blockPreview(open: number, close: number): string {
 }
 
 export default function SetupScreen() {
+  const onKeyboardSubmit = useKeyboardSubmit(() => next());
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const isSample = params.mode === 'sample';
@@ -192,7 +194,7 @@ export default function SetupScreen() {
                   }}
                   autoFocus
                   returnKeyType="next"
-                  onSubmitEditing={next}
+                  onSubmitEditing={onKeyboardSubmit}
                   maxLength={60}
                   placeholder="Dumont Creamery & Cafe"
                   placeholderTextColor={C.muted}

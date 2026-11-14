@@ -14,7 +14,7 @@ const CONTENT: Record<string, { title: string; body: string[] }> = {
       'We use your email to send availability requests, published shifts and shift reminders. We do not sell your data and we do not use it for advertising.',
       'Messages you paste into the availability reader are sent to our AI provider only to turn them into days and times. They are not used to train models.',
       'Payments are handled by Stripe. ShiftCup never stores card numbers.',
-      'You can delete your account from Settings. Deleting removes your sign-in and your café data.',
+      'You can delete your account in the app, under Settings (managers) or Me (employees). Deleting removes your sign-in and your café data.',
       `Questions? Email ${SUPPORT_EMAIL}.`,
     ],
   },

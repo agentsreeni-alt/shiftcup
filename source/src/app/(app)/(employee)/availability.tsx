@@ -59,7 +59,11 @@ export default function AvailabilityScreen() {
       }
       setDraft(next);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Could not load your week. Check your connection and try again.');
+      setMessage(
+        e instanceof Error
+          ? e.message
+          : 'Could not load your week. Check your connection and try again.',
+      );
     } finally {
       setLoading(false);
     }
@@ -128,7 +132,11 @@ export default function AvailabilityScreen() {
         <Text className="mt-0.5 text-xs text-muted-foreground">
           {requestId
             ? `Due ${fmtDue(
-                availabilityDueDate(weekStart, settings?.due_weekday ?? 2, settings?.due_min ?? 1200),
+                availabilityDueDate(
+                  weekStart,
+                  settings?.due_weekday ?? 2,
+                  settings?.due_min ?? 1200,
+                ),
               )}.`
             : 'Your manager has not sent a request yet. You can still send this.'}
         </Text>
@@ -137,7 +145,7 @@ export default function AvailabilityScreen() {
       {answered ? (
         <View className="mb-3 flex-row items-center gap-2 rounded-xl bg-accent px-4 py-2.5">
           <Check size={14} color={C.pine} />
-          <Text className="text-xs font-semibold text-accent-foreground">
+          <Text className="flex-1 text-xs font-semibold text-accent-foreground">
             You already sent this week. Send again if something changed.
           </Text>
         </View>
@@ -169,7 +177,9 @@ export default function AvailabilityScreen() {
                       key={o.key}
                       onPress={() => setDay(i, { kind: o.key })}
                       className={`flex-1 items-center rounded-lg py-2 ${
-                        d.kind === o.key ? 'bg-primary' : 'border border-border bg-card'
+                        d.kind === o.key
+                          ? 'border border-primary bg-primary'
+                          : 'border border-border bg-card'
                       }`}
                     >
                       <Text
@@ -185,7 +195,11 @@ export default function AvailabilityScreen() {
                 {d.kind === 'window' ? (
                   <View className="mt-2 flex-row gap-2">
                     <View className="flex-1">
-                      <TimeField compact value={d.start} onChange={(v) => setDay(i, { start: v })} />
+                      <TimeField
+                        compact
+                        value={d.start}
+                        onChange={(v) => setDay(i, { start: v })}
+                      />
                     </View>
                     <Text className="self-center text-xs text-muted-foreground">to</Text>
                     <View className="flex-1">

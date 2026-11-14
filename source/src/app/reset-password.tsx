@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/client/supabase';
 import { Btn } from '@/components/kit';
 import { C } from '@/lib/colors';
+import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 /**
  * Opened from the password reset email. Supabase appends the recovery tokens to the
@@ -13,6 +14,7 @@ import { C } from '@/lib/colors';
  * session, then let the person choose a new password.
  */
 export default function ResetPasswordScreen() {
+  const onKeyboardSubmit = useKeyboardSubmit(() => save());
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [linkError, setLinkError] = useState('');
@@ -136,7 +138,7 @@ export default function ResetPasswordScreen() {
                       secureTextEntry
                       autoComplete="new-password"
                       returnKeyType="go"
-                      onSubmitEditing={save}
+                      onSubmitEditing={onKeyboardSubmit}
                       placeholderTextColor={C.muted}
                       className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
                     />

@@ -30,6 +30,7 @@ import type { CafeSettings, CoverageBlock, StoreHour } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 import { planningWeekStart } from '@/lib/api';
 import { useFocusEffect } from 'expo-router';
+import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 const LEAD_OPTIONS = [
   { min: 30, label: '30 min' },
@@ -39,6 +40,7 @@ const LEAD_OPTIONS = [
 ];
 
 export default function SettingsScreen() {
+  const onKeyboardSubmit = useKeyboardSubmit(() => saveName());
   const router = useRouter();
   const { cafe, profile, signOut, refresh, isSample } = useApp();
   const weekStart = planningWeekStart();
@@ -161,7 +163,7 @@ export default function SettingsScreen() {
           }}
           maxLength={60}
           returnKeyType="done"
-          onSubmitEditing={saveName}
+          onSubmitEditing={onKeyboardSubmit}
           className="rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground"
         />
         <View className="mt-2">
@@ -179,7 +181,9 @@ export default function SettingsScreen() {
               key={d}
               onPress={() => patchSettings({ due_weekday: i })}
               className={`flex-1 items-center rounded-lg py-2 ${
-                settings?.due_weekday === i ? 'bg-primary' : 'border border-border bg-card'
+                settings?.due_weekday === i
+                  ? 'border border-primary bg-primary'
+                  : 'border border-border bg-card'
               }`}
             >
               <Text
@@ -207,7 +211,9 @@ export default function SettingsScreen() {
               key={d}
               onPress={() => patchSettings({ publish_weekday: i })}
               className={`flex-1 items-center rounded-lg py-2 ${
-                settings?.publish_weekday === i ? 'bg-primary' : 'border border-border bg-card'
+                settings?.publish_weekday === i
+                  ? 'border border-primary bg-primary'
+                  : 'border border-border bg-card'
               }`}
             >
               <Text
@@ -239,7 +245,7 @@ export default function SettingsScreen() {
                 onPress={() => patchSettings({ second_reminder_min: o.min })}
                 aria-selected={on}
                 className={`flex-1 items-center rounded-lg py-2 ${
-                  on ? 'bg-primary' : 'border border-border bg-card'
+                  on ? 'border border-primary bg-primary' : 'border border-border bg-card'
                 }`}
               >
                 <Text
@@ -290,7 +296,9 @@ export default function SettingsScreen() {
               key={ch}
               onPress={() => patchSettings({ channel: ch })}
               className={`flex-1 items-center rounded-xl py-2.5 ${
-                settings?.channel === ch ? 'bg-primary' : 'border border-border bg-card'
+                settings?.channel === ch
+                  ? 'border border-primary bg-primary'
+                  : 'border border-border bg-card'
               }`}
             >
               <Text
@@ -537,7 +545,7 @@ function BlockSheet({
               key={r}
               onPress={() => setRule(r)}
               className={`flex-1 items-center rounded-xl py-3 ${
-                rule === r ? 'bg-primary' : 'border border-border bg-card'
+                rule === r ? 'border border-primary bg-primary' : 'border border-border bg-card'
               }`}
             >
               <Text

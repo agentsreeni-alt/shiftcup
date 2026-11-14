@@ -12,7 +12,17 @@ import {
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { AppBar, Btn, Card, Notice, PressScale, Screen, SectionTitle, Sheet, Stars } from '@/components/kit';
+import {
+  AppBar,
+  Btn,
+  Card,
+  Notice,
+  PressScale,
+  Screen,
+  SectionTitle,
+  Sheet,
+  Stars,
+} from '@/components/kit';
 import {
   loadAssignments,
   publishWeek,
@@ -25,8 +35,15 @@ import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
 import { DAY_LONG, DAY_SHORT, fmtHours, fmtRange, fmtWeekLabel, weekdayOf } from '@/lib/dates';
 import { checkEligibility, fillOpenSlots, weekMinutes } from '@/lib/scheduling';
-import { JOB_ROLES, type Assignment, type CafeSettings, type Employee, type SlotKind } from '@/lib/types';
+import {
+  JOB_ROLES,
+  type Assignment,
+  type CafeSettings,
+  type Employee,
+  type SlotKind,
+} from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
+import { changedSincePublish } from '@/lib/utils';
 
 const FALLBACK_SETTINGS: CafeSettings = {
   cafe_id: '',
@@ -38,13 +55,6 @@ const FALLBACK_SETTINGS: CafeSettings = {
   max_shift_hours: 8,
   channel: 'email',
 };
-
-function snapshotKey(list: Assignment[]): string {
-  return list
-    .map((a) => `${a.block_id}:${a.slot}:${a.employee_id ?? ''}`)
-    .sort()
-    .join('|');
-}
 
 export default function ScheduleScreen() {
   const router = useRouter();
@@ -68,17 +78,10 @@ export default function ScheduleScreen() {
 
   const status = useMemo(() => {
     if (!data.published) return 'Draft';
-    const publishedKey = snapshotKey(
-      (data.published.snapshot as Assignment[] | null)?.map((s) => ({
-        ...s,
-        cafe_id: '',
-        week_start: weekStart,
-        manual: false,
-        over_limit: false,
-      })) ?? [],
-    );
-    return publishedKey === snapshotKey(data.assignments) ? 'Published' : 'Changed since published';
-  }, [data.published, data.assignments, weekStart]);
+    return changedSincePublish(data.published.snapshot, data.assignments)
+      ? 'Changed since published'
+      : 'Published';
+  }, [data.published, data.assignments]);
 
   const dayBlocks = data.blocks.filter((b) => b.weekday === day);
 
@@ -344,23 +347,14 @@ export default function ScheduleScreen() {
   // First load: show a spinner, not an empty 'all clear' week.
 
   if (data.loading && !data.settings && !data.error) {
-
     return (
-
       <Screen>
-
         <View className="items-center py-32">
-
           <ActivityIndicator color={C.pine} />
-
         </View>
-
       </Screen>
-
     );
-
   }
-
 
   return (
     <Screen>
@@ -409,10 +403,16 @@ export default function ScheduleScreen() {
       ) : null}
 
       <Btn
-        label={status === 'Published' ? 'Publish changes' : 'Approve and publish'}
+        label={
+          status === 'Published'
+            ? 'Published, nothing new to send'
+            : status === 'Changed since published'
+              ? 'Publish changes'
+              : 'Approve and publish'
+        }
         loading={busy}
         onPress={() => runPublish()}
-        disabled={data.assignments.length === 0}
+        disabled={data.assignments.length === 0 || status === 'Published'}
       />
 
       {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
@@ -500,7 +500,7 @@ export default function ScheduleScreen() {
             key={d}
             onPress={() => setDay(i)}
             className={`flex-1 items-center rounded-xl py-2.5 ${
-              day === i ? 'bg-primary' : 'border border-border bg-card'
+              day === i ? 'border border-primary bg-primary' : 'border border-border bg-card'
             }`}
           >
             <Text
@@ -569,9 +569,7 @@ export default function ScheduleScreen() {
                             slot={slot}
                             name={emp?.name}
                             rating={emp?.rating}
-                            hours={
-                              emp ? weekMinutes(data.engine.assignments, emp.id) : undefined
-                            }
+                            hours={emp ? weekMinutes(data.engine.assignments, emp.id) : undefined}
                             note={
                               hasCover
                                 ? 'Asked for cover'
@@ -713,20 +711,29 @@ export default function ScheduleScreen() {
           ) : null}
           {sheetRows.length > 0 && !sheetRows.some((r) => r.ok || r.overLimit) ? (
             <Notice
-              tone="info"
+              tone="warn"
               title="Nobody can take this slot yet"
-              body={
-                slotSheet?.slot === 'solo'
-                  ? 'Only people marked “Can work alone” can cover a solo block. Turn that on for someone in Team, change this block to two people in Settings, or ask your team for more availability.'
-                  : 'Ask your team for more availability, or change their roles in Team.'
-              }
+              body={(() => {
+                // Explain the real reason, not a generic one.
+                if (sheetRows.some((r) => r.soloFix)) {
+                  return 'Only people marked “Can work alone” can cover a solo block. Tap “Let them work alone” below, or change this block to two people in Settings.';
+                }
+                const notReplied = sheetRows.filter(
+                  (r) => r.reason === 'Cannot: has not replied',
+                ).length;
+                if (notReplied > 0) {
+                  return `${notReplied} ${
+                    notReplied === 1 ? 'person has' : 'people have'
+                  } not sent availability yet. Nudge them from Team, then check back.`;
+                }
+                return slotSheet?.slot === 'solo'
+                  ? 'Nobody said they are free for this block. Ask your team if anyone can come in, or change the block in Settings.'
+                  : 'Ask your team for more availability, or change their roles in Team.';
+              })()}
             />
           ) : null}
           {sheetRows.map((row) => (
-            <View
-              key={row.emp.id}
-              className="rounded-xl border border-border bg-card px-3 py-3"
-            >
+            <View key={row.emp.id} className="rounded-xl border border-border bg-card px-3 py-3">
               <View className="flex-row items-center justify-between gap-2">
                 <View className="flex-1">
                   <Text className="text-sm font-semibold text-foreground">

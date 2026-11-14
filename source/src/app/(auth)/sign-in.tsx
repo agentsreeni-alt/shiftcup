@@ -8,11 +8,13 @@ import { supabase } from '@/client/supabase';
 import { BackButton, Btn } from '@/components/kit';
 import { friendlyAuthError, looksLikeEmail } from '@/lib/auth-messages';
 import { C } from '@/lib/colors';
+import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 // Reset links always open the live website, which can set the new password on any device.
 const RESET_BASE = 'https://shiftcup-1dd3b.web.app';
 
 export default function SignInScreen() {
+  const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -104,7 +106,7 @@ export default function SignInScreen() {
                       placeholder="Your password"
                       placeholderTextColor={C.muted}
                       returnKeyType="go"
-                      onSubmitEditing={submit}
+                      onSubmitEditing={onKeyboardSubmit}
                       className="flex-1 px-4 py-3.5 text-base text-foreground"
                     />
                     <Pressable
