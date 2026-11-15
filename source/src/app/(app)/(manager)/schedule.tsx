@@ -96,6 +96,7 @@ export default function ScheduleScreen() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [showAllGaps, setShowAllGaps] = useState(false);
+  const [showReminders, setShowReminders] = useState(false);
   // Set after a fill: the slots still open then are ones nobody is free for, so offering
   // to fill them again would do nothing. Cleared as soon as the week changes.
   const [fillDone, setFillDone] = useState('');
@@ -607,7 +608,7 @@ export default function ScheduleScreen() {
           <SectionTitle>Gaps</SectionTitle>
           {(showAllGaps ? data.gaps : data.gaps.slice(0, 3)).map((g) => (
             <View key={g.key} className="rounded-2xl border border-destructive/30 bg-card p-3">
-              <View className="flex-row items-start gap-2">
+              <View className="flex-row items-center gap-2.5">
                 <AlertTriangle size={15} color={C.red} />
                 <View className="flex-1">
                   <Text className="text-sm font-semibold text-foreground">{g.label}</Text>
@@ -664,7 +665,7 @@ export default function ScheduleScreen() {
           <SectionTitle>Clashes</SectionTitle>
           {data.clashes.map((c) => (
             <View key={c.key} className="rounded-2xl border border-destructive/30 bg-card p-3">
-              <View className="flex-row items-start gap-2">
+              <View className="flex-row items-center gap-2.5">
                 <AlertTriangle size={15} color={C.red} />
                 <View className="flex-1">
                   <Text className="text-sm font-semibold text-foreground">
@@ -877,39 +878,69 @@ export default function ScheduleScreen() {
         />
       </View>
 
-      <SectionTitle>Reminders queued</SectionTitle>
-      {data.reminders.filter((r) => r.state === 'queued').length === 0 ? (
-        <Text className="text-sm text-muted-foreground">
-          Nothing queued yet. Publish the week and ShiftCup queues the reminders.
-        </Text>
-      ) : (
-        <View className="gap-2">
-          {data.reminders
-            .filter((r) => r.state === 'queued')
-            .slice(0, 12)
-            .map((r) => {
-              const emp = data.employees.find((e) => e.id === r.employee_id);
-              return (
-                <View key={r.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
-                  <Text className="text-xs font-semibold text-foreground">
-                    {emp?.name ?? 'Team'}
-                    {r.kind === 'published' ? '' : ` · ${DAY_SHORT[r.weekday]}`} ·{' '}
-                    {r.kind === 'evening'
-                      ? 'evening before'
-                      : r.kind === 'soon'
-                        ? 'before shift'
-                        : r.kind === 'published'
-                          ? 'week summary'
-                          : r.kind === 'request'
-                            ? 'availability request'
-                            : r.kind}
+      {(() => {
+        const queued = data.reminders.filter((r) => r.state === 'queued');
+        const people = new Set(queued.map((r) => r.employee_id)).size;
+        return (
+          <>
+            <SectionTitle>Reminders</SectionTitle>
+            {queued.length === 0 ? (
+              <Text className="px-1 text-sm text-muted-foreground">
+                Nothing queued yet. Publish the week and ShiftCup queues the reminders.
+              </Text>
+            ) : (
+              // A one-line summary; the full list is there for anyone who wants to check it.
+              <View
+                className="rounded-2xl border border-border/60 bg-card"
+                style={[{ borderCurve: 'continuous' }, cardShadow]}
+              >
+                <PressScale
+                  onPress={() => setShowReminders((v) => !v)}
+                  scale={0.99}
+                  accessibilityLabel={showReminders ? 'Hide reminders' : 'Show reminders'}
+                  className="flex-row items-center gap-3 px-4 py-3.5"
+                >
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-foreground">
+                      {queued.length} {queued.length === 1 ? 'reminder' : 'reminders'} scheduled
+                    </Text>
+                    <Text className="text-xs text-muted-foreground">
+                      For {people} {people === 1 ? 'person' : 'people'}: the evening before and
+                      before each shift
+                    </Text>
+                  </View>
+                  <Text className="text-xs font-semibold text-primary">
+                    {showReminders ? 'Hide' : 'Show'}
                   </Text>
-                  <Text className="mt-0.5 text-xs text-muted-foreground">{r.body}</Text>
-                </View>
-              );
-            })}
-        </View>
-      )}
+                </PressScale>
+                {showReminders
+                  ? queued.slice(0, 40).map((r) => {
+                      const emp = data.employees.find((e) => e.id === r.employee_id);
+                      return (
+                        <View key={r.id} className="border-t border-border/70 px-4 py-2.5">
+                          <Text className="text-xs font-semibold text-foreground">
+                            {emp?.name ?? 'Team'}
+                            {r.kind === 'published' ? '' : ` · ${DAY_SHORT[r.weekday]}`} ·{' '}
+                            {r.kind === 'evening'
+                              ? 'evening before'
+                              : r.kind === 'soon'
+                                ? 'before shift'
+                                : r.kind === 'published'
+                                  ? 'week summary'
+                                  : r.kind === 'request'
+                                    ? 'availability request'
+                                    : r.kind}
+                          </Text>
+                          <Text className="mt-0.5 text-xs text-muted-foreground">{r.body}</Text>
+                        </View>
+                      );
+                    })
+                  : null}
+              </View>
+            )}
+          </>
+        );
+      })()}
 
       <Sheet
         visible={Boolean(slotSheet)}

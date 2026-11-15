@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -17,6 +18,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -24,8 +26,11 @@ import Animated, {
   SlideInDown,
   useAnimatedStyle,
   useReducedMotion,
+  useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C } from '@/lib/colors';
@@ -345,10 +350,13 @@ export function Field({
       <Text className="text-sm font-medium text-foreground">{label}</Text>
       <TextInput
         placeholderTextColor="#8A968D"
-        className={`rounded-xl border bg-card px-4 py-3.5 text-base text-foreground ${
-          error ? 'border-destructive' : focused ? 'border-primary/50' : 'border-input'
-        }`}
-        style={{ borderCurve: 'continuous' }}
+        // Classes stay fixed: swapping them on focus can rebuild the native input mid-typing
+        // on iOS, which drops characters. Only the border colour changes, as a plain style.
+        className="rounded-xl border-[1.5px] bg-card px-4 py-3.5 text-base text-foreground"
+        style={{
+          borderCurve: 'continuous',
+          borderColor: error ? C.red : focused ? C.pine : C.border,
+        }}
         {...props}
         onFocus={(e) => {
           setFocused(true);
@@ -442,57 +450,89 @@ export function Sheet({
 }) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
+  // Drag the handle or title down to close, like system sheets on iOS and Android.
+  const dragY = useSharedValue(0);
+  useEffect(() => {
+    if (visible) dragY.value = 0;
+  }, [visible, dragY]);
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .onUpdate((e) => {
+      dragY.value = Math.max(0, e.translationY);
+    })
+    .onEnd((e) => {
+      if (e.translationY > 110 || e.velocityY > 900) {
+        dragY.value = withTiming(800, { duration: 180 });
+        scheduleOnRN(onClose);
+      } else {
+        dragY.value = withSpring(0, { damping: 20, stiffness: 260 });
+      }
+    });
+  const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dragY.value }] }));
   // Backdrop fades while the panel rises on the iOS sheet curve. The Modal itself only
   // fades, so the dim layer never slides up with the sheet.
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* The sheet rises with the keyboard, so fields and buttons stay visible while typing. */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 justify-end"
-        style={{ backgroundColor: 'rgba(12, 28, 22, 0.42)' }}
-      >
-        <Pressable className="flex-1" onPress={onClose} accessibilityLabel="Close" />
-        <Animated.View
-          entering={reduced ? FadeIn.duration(180) : SlideInDown.duration(340).easing(EASE_SHEET)}
-          style={{ maxHeight: '85%' }}
+      {/* Gestures inside a Modal need their own root (Android in particular). */}
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* The sheet rises with the keyboard, so fields and buttons stay visible while typing. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end"
+          style={{ backgroundColor: 'rgba(12, 28, 22, 0.42)' }}
         >
-          <View
-            className="rounded-t-[28px] bg-card px-5 pt-2.5"
-            style={[
-              { paddingBottom: insets.bottom + 20, borderCurve: 'continuous', maxHeight: '100%' },
-              { boxShadow: '0 -12px 40px -16px rgba(12, 28, 22, 0.35)' },
-            ]}
+          <Pressable className="flex-1" onPress={onClose} accessibilityLabel="Close" />
+          <Animated.View
+            entering={reduced ? FadeIn.duration(180) : SlideInDown.duration(340).easing(EASE_SHEET)}
+            style={{ maxHeight: '85%' }}
           >
-            <View className="mb-2 items-center">
-              <View className="h-1.5 w-10 rounded-full bg-border" />
-            </View>
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text
-                className="flex-1 text-lg font-bold text-foreground"
-                style={{ letterSpacing: -0.3 }}
+            <Animated.View style={[{ maxHeight: '100%' }, dragStyle]}>
+              <View
+                className="rounded-t-[28px] bg-card px-5 pt-2.5"
+                style={[
+                  {
+                    paddingBottom: insets.bottom + 20,
+                    borderCurve: 'continuous',
+                    maxHeight: '100%',
+                  },
+                  { boxShadow: '0 -12px 40px -16px rgba(12, 28, 22, 0.35)' },
+                ]}
               >
-                {title}
-              </Text>
-              <PressScale
-                onPress={onClose}
-                hitSlop={10}
-                accessibilityLabel="Close"
-                className="h-8 w-8 items-center justify-center rounded-full bg-muted"
-              >
-                <X size={16} color={C.pine} strokeWidth={2.4} />
-              </PressScale>
-            </View>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="interactive"
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
-          </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
+                <GestureDetector gesture={pan}>
+                  <View>
+                    <View className="mb-2 items-center py-1">
+                      <View className="h-1.5 w-10 rounded-full bg-border" />
+                    </View>
+                    <View className="mb-3 flex-row items-center justify-between">
+                      <Text
+                        className="flex-1 text-lg font-bold text-foreground"
+                        style={{ letterSpacing: -0.3 }}
+                      >
+                        {title}
+                      </Text>
+                      <PressScale
+                        onPress={onClose}
+                        hitSlop={10}
+                        accessibilityLabel="Close"
+                        className="h-8 w-8 items-center justify-center rounded-full bg-muted"
+                      >
+                        <X size={16} color={C.pine} strokeWidth={2.4} />
+                      </PressScale>
+                    </View>
+                  </View>
+                </GestureDetector>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  showsVerticalScrollIndicator={false}
+                >
+                  {children}
+                </ScrollView>
+              </View>
+            </Animated.View>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -880,4 +920,37 @@ export function TabIcon({
       <Icon size={21} color={tint} strokeWidth={focused ? 2.4 : 2} />
     </View>
   );
+}
+
+/**
+ * Native confirm dialog (iOS alert, Android dialog, browser confirm on web). Resolves true
+ * only when the person taps the confirm button.
+ */
+export function confirmAction(
+  title: string,
+  message: string,
+  confirmLabel: string,
+  destructive = true,
+): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    // eslint-disable-next-line no-alert
+    return Promise.resolve(
+      typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`),
+    );
+  }
+  return new Promise((resolve) => {
+    Alert.alert(
+      title,
+      message,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        {
+          text: confirmLabel,
+          style: destructive ? 'destructive' : 'default',
+          onPress: () => resolve(true),
+        },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
 }

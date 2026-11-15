@@ -4,7 +4,16 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
-import { AppBar, Btn, Card, PressScale, Screen, SectionTitle, Sheet } from '@/components/kit';
+import {
+  AppBar,
+  Btn,
+  Card,
+  PressScale,
+  Screen,
+  SectionTitle,
+  Sheet,
+  confirmAction,
+} from '@/components/kit';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
 
@@ -39,7 +48,9 @@ export default function EmployeeProfileScreen() {
       <AppBar title="Me" subtitle={cafeName ?? ''} />
 
       <Card>
-        <Text className="text-xl font-bold text-foreground">{employee?.name ?? 'Your profile'}</Text>
+        <Text className="text-xl font-bold text-foreground">
+          {employee?.name ?? 'Your profile'}
+        </Text>
         <Text className="mt-0.5 text-sm text-muted-foreground">{profile?.email}</Text>
         <View className="mt-3 flex-row flex-wrap gap-1.5">
           {(employee?.roles ?? []).map((r) => (
@@ -82,11 +93,22 @@ export default function EmployeeProfileScreen() {
 
       <SectionTitle>Account</SectionTitle>
       <View className="gap-2">
-        <Btn label="Sign out" variant="ghost" onPress={() => signOut()} />
-        <PressScale
-          onPress={() => setDeleteOpen(true)}
-          className="mt-2 items-center py-2"
-        >
+        <Btn
+          label="Sign out"
+          variant="ghost"
+          onPress={async () => {
+            if (
+              await confirmAction(
+                'Sign out?',
+                'You can sign back in any time with your email and password.',
+                'Sign out',
+              )
+            ) {
+              await signOut();
+            }
+          }}
+        />
+        <PressScale onPress={() => setDeleteOpen(true)} className="mt-2 items-center py-2">
           <Text className="text-sm font-semibold text-destructive">Delete my account</Text>
         </PressScale>
       </View>
@@ -99,7 +121,12 @@ export default function EmployeeProfileScreen() {
             This removes your sign-in and your availability. Your manager will need to add you
             again. This cannot be undone.
           </Text>
-          <Btn label="Yes, delete my account" variant="danger" loading={busy} onPress={removeAccount} />
+          <Btn
+            label="Yes, delete my account"
+            variant="danger"
+            loading={busy}
+            onPress={removeAccount}
+          />
           <Btn label="Keep my account" variant="ghost" onPress={() => setDeleteOpen(false)} />
         </View>
       </Sheet>

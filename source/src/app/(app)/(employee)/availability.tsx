@@ -591,8 +591,8 @@ export default function AvailabilityScreen() {
           </View>
         ) : null}
         <Text className="mt-2 text-xs text-muted-foreground">
-          For a holiday, an exam or an appointment. Already on the schedule and cannot make a shift?
-          Use “I can’t make it” in My shifts.
+          For a holiday, an exam or an appointment, up to 3 weeks ahead. Already on the schedule and
+          cannot make a shift? Use “I can’t make it” in My shifts.
         </Text>
       </Card>
 

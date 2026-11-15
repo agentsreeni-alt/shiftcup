@@ -25,10 +25,13 @@ export default function SignInScreen() {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState('');
   const [focus, setFocus] = useState<'email' | 'password' | null>(null);
-  const box = (f: 'email' | 'password') =>
-    `flex-row items-center gap-2 rounded-2xl border-[1.5px] bg-card pl-4 pr-2 ${
-      focus === f ? 'border-primary' : error ? 'border-destructive/60' : 'border-input'
-    }`;
+  // Fixed classes and a style-only border colour: changing classes while typing can rebuild
+  // the native input on iOS and send keystrokes to the wrong field.
+  const BOX = 'flex-row items-center gap-2 rounded-2xl border-[1.5px] bg-card pl-4 pr-2';
+  const boxStyle = (f: 'email' | 'password') => ({
+    borderCurve: 'continuous' as const,
+    borderColor: focus === f ? C.pine : error ? C.red : C.border,
+  });
 
   const forgot = async () => {
     setError('');
@@ -111,7 +114,7 @@ export default function SignInScreen() {
               <View className="gap-4">
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Email</Text>
-                  <View className={box('email')} style={{ borderCurve: 'continuous' }}>
+                  <View className={BOX} style={boxStyle('email')}>
                     <Mail size={18} color={focus === 'email' ? C.pine : C.muted} />
                     <TextInput
                       ref={emailRef}
@@ -124,7 +127,10 @@ export default function SignInScreen() {
                       textContentType="emailAddress"
                       autoCorrect={false}
                       spellCheck={false}
-                      onChangeText={setEmail}
+                      onChangeText={(t) => {
+                        setEmail(t);
+                        if (error) setError('');
+                      }}
                       autoCapitalize="none"
                       autoComplete="email"
                       keyboardType="email-address"
@@ -137,7 +143,7 @@ export default function SignInScreen() {
                 </View>
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Password</Text>
-                  <View className={box('password')} style={{ borderCurve: 'continuous' }}>
+                  <View className={BOX} style={boxStyle('password')}>
                     <Lock size={18} color={focus === 'password' ? C.pine : C.muted} />
                     <TextInput
                       ref={passwordRef}
@@ -146,7 +152,10 @@ export default function SignInScreen() {
                       style={{ outlineStyle: 'none' } as object}
                       value={password}
                       textContentType="password"
-                      onChangeText={setPassword}
+                      onChangeText={(t) => {
+                        setPassword(t);
+                        if (error) setError('');
+                      }}
                       secureTextEntry={!show}
                       placeholder="Your password"
                       placeholderTextColor={C.muted}

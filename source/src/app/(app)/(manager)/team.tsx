@@ -11,7 +11,7 @@ import {
   UserPlus,
 } from 'lucide-react-native';
 import { type ElementRef, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
 import {
@@ -551,6 +551,17 @@ export default function TeamScreen() {
                 <View className="mt-3 flex-row gap-1">
                   {DAY_SHORT.map((d, i) => {
                     const row = days.find((x) => x.weekday === i);
+                    // Different from the usual week for this week only (not just re-confirmed).
+                    const usualDay = Array.isArray(emp.usual_week) ? emp.usual_week[i] : null;
+                    const oneOff = Boolean(
+                      row &&
+                      !row.from_usual &&
+                      usualDay &&
+                      (row.kind !== usualDay.kind ||
+                        (row.kind === 'window' &&
+                          (row.start_min !== usualDay.start_min ||
+                            row.end_min !== usualDay.end_min))),
+                    );
                     const label =
                       !row || row.kind === 'none'
                         ? '—'
@@ -582,7 +593,7 @@ export default function TeamScreen() {
                           {d}
                         </Text>
                         <Text className="text-[10px] font-semibold text-foreground">{label}</Text>
-                        {row && !row.from_usual && Array.isArray(emp.usual_week) ? (
+                        {oneOff ? (
                           // Changed for this week only: a small dot, so one-offs stand out.
                           <View
                             className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
@@ -595,7 +606,16 @@ export default function TeamScreen() {
                 </View>
                 <Text className="mt-1.5 text-[11px] text-muted-foreground">
                   {Array.isArray(emp.usual_week)
-                    ? days.some((d) => !d.from_usual)
+                    ? days.some((d) => {
+                        const u = emp.usual_week?.[d.weekday];
+                        return (
+                          !d.from_usual &&
+                          u &&
+                          (d.kind !== u.kind ||
+                            (d.kind === 'window' &&
+                              (d.start_min !== u.start_min || d.end_min !== u.end_min)))
+                        );
+                      })
                       ? `Usual week. Days with a dot are changed for ${fmtWeekLabel(weekStart)} only.`
                       : 'Usual week. Tap a day to edit.'
                     : 'Tap a day to set when they can usually work.'}
@@ -883,8 +903,9 @@ function MemberSheet({
         roles,
         canWorkAlone: solo,
         rating,
-        maxHours: Number(maxHours) || 20,
-        hourlyWage: Number(wage) || 0,
+        // Whole hours between 1 and 80; wages accept "15,50" as well as "15.50".
+        maxHours: Math.min(80, Math.max(1, Math.round(Number(maxHours)) || 20)),
+        hourlyWage: Math.max(0, Number(wage.replace(',', '.').replace(/[^0-9.]/g, '')) || 0),
       };
       if (editing) {
         await updateEmployee(editing.id, {
@@ -1020,7 +1041,9 @@ function MemberSheet({
             <TextInput
               value={maxHours}
               onChangeText={setMaxHours}
-              keyboardType="number-pad"
+              // iOS number pads have no Return key; this layout does, so the keyboard can close.
+              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'number-pad'}
+              returnKeyType="done"
               className="rounded-xl border border-input bg-card px-3 py-2.5 text-base text-foreground"
             />
           </View>
@@ -1029,7 +1052,8 @@ function MemberSheet({
             <TextInput
               value={wage}
               onChangeText={setWage}
-              keyboardType="decimal-pad"
+              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'decimal-pad'}
+              returnKeyType="done"
               className="rounded-xl border border-input bg-card px-3 py-2.5 text-base text-foreground"
             />
           </View>

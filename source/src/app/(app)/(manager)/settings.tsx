@@ -12,6 +12,8 @@ import {
   SectionTitle,
   Sheet,
   TimeField,
+  confirmAction,
+  toast,
 } from '@/components/kit';
 import {
   addBlock,
@@ -84,6 +86,7 @@ export default function SettingsScreen() {
       setRoutineNote('');
       await updateSettings(cafe.id, patch);
       await data.reload();
+      toast('Saved');
     } catch (e) {
       setRoutineNote(e instanceof Error ? e.message : 'Could not save.');
     } finally {
@@ -441,7 +444,21 @@ export default function SettingsScreen() {
       <SectionTitle>Account</SectionTitle>
       <View className="gap-2">
         <Text className="text-xs text-muted-foreground">Signed in as {profile?.email}</Text>
-        <Btn label="Sign out" variant="ghost" onPress={() => signOut()} />
+        <Btn
+          label="Sign out"
+          variant="ghost"
+          onPress={async () => {
+            if (
+              await confirmAction(
+                'Sign out?',
+                'You can sign back in any time with your email and password.',
+                'Sign out',
+              )
+            ) {
+              await signOut();
+            }
+          }}
+        />
         <PressScale onPress={() => setDeleteOpen(true)} className="mt-2 items-center py-2">
           <Text className="text-sm font-semibold text-destructive">Delete my account</Text>
         </PressScale>
