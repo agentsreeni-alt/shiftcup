@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Eye, EyeOff } from 'lucide-react-native';
-import { useState } from 'react';
+import { type ElementRef, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +11,10 @@ import { C } from '@/lib/colors';
 import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 export default function JoinScreen() {
+  const codeRef = useRef<ElementRef<typeof TextInput>>(null);
+  const nameRef = useRef<ElementRef<typeof TextInput>>(null);
+  const emailRef = useRef<ElementRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
@@ -102,7 +106,11 @@ export default function JoinScreen() {
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Invite code</Text>
                   <TextInput
+                    ref={codeRef}
                     value={code}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => nameRef.current?.focus()}
                     onChangeText={(v) => setCode(v.toUpperCase())}
                     autoCapitalize="characters"
                     placeholder="e.g. 4F2A9C1B"
@@ -113,7 +121,11 @@ export default function JoinScreen() {
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Your first name</Text>
                   <TextInput
+                    ref={nameRef}
                     value={name}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => emailRef.current?.focus()}
                     onChangeText={setName}
                     placeholder="Maya"
                     placeholderTextColor={C.muted}
@@ -123,7 +135,14 @@ export default function JoinScreen() {
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Email</Text>
                   <TextInput
+                    ref={emailRef}
                     value={email}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    textContentType="emailAddress"
+                    autoCorrect={false}
+                    spellCheck={false}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     autoComplete="email"
@@ -137,7 +156,9 @@ export default function JoinScreen() {
                   <Text className="text-sm font-medium text-foreground">Password</Text>
                   <View className="flex-row items-center rounded-xl border border-input bg-card pr-2">
                     <TextInput
+                      ref={passwordRef}
                       value={password}
+                      textContentType="newPassword"
                       onChangeText={setPassword}
                       secureTextEntry={!show}
                       autoComplete="new-password"

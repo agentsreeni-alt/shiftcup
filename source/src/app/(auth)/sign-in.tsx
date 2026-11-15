@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Eye, EyeOff } from 'lucide-react-native';
-import { useState } from 'react';
+import { type ElementRef, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,8 @@ import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 const RESET_BASE = 'https://shiftcup-1dd3b.web.app';
 
 export default function SignInScreen() {
+  const emailRef = useRef<ElementRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -86,7 +88,14 @@ export default function SignInScreen() {
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Email</Text>
                   <TextInput
+                    ref={emailRef}
                     value={email}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    textContentType="emailAddress"
+                    autoCorrect={false}
+                    spellCheck={false}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     autoComplete="email"
@@ -100,7 +109,9 @@ export default function SignInScreen() {
                   <Text className="text-sm font-medium text-foreground">Password</Text>
                   <View className="flex-row items-center rounded-xl border border-input bg-card pr-2">
                     <TextInput
+                      ref={passwordRef}
                       value={password}
+                      textContentType="password"
                       onChangeText={setPassword}
                       secureTextEntry={!show}
                       placeholder="Your password"

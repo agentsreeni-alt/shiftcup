@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Eye, EyeOff } from 'lucide-react-native';
-import { useState } from 'react';
+import { type ElementRef, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +11,8 @@ import { C } from '@/lib/colors';
 import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
 
 export default function SignUpScreen() {
+  const emailRef = useRef<ElementRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -86,7 +88,14 @@ export default function SignUpScreen() {
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Email</Text>
                   <TextInput
+                    ref={emailRef}
                     value={email}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    textContentType="emailAddress"
+                    autoCorrect={false}
+                    spellCheck={false}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     autoComplete="email"
@@ -100,7 +109,9 @@ export default function SignUpScreen() {
                   <Text className="text-sm font-medium text-foreground">Password</Text>
                   <View className="flex-row items-center rounded-xl border border-input bg-card pr-2">
                     <TextInput
+                      ref={passwordRef}
                       value={password}
+                      textContentType="newPassword"
                       onChangeText={setPassword}
                       secureTextEntry={!show}
                       autoComplete="new-password"

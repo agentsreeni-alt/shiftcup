@@ -3,7 +3,9 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -77,7 +79,13 @@ export function PressScale({
 }
 
 /** Back arrow that still works when the page was opened directly (no history). */
-export function BackButton({ fallback = '/', label = 'Go back' }: { fallback?: string; label?: string }) {
+export function BackButton({
+  fallback = '/',
+  label = 'Go back',
+}: {
+  fallback?: string;
+  label?: string;
+}) {
   const router = useRouter();
   return (
     <Pressable
@@ -127,7 +135,9 @@ export function Screen({
           contentContainerStyle={WIDE_LIMIT}
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          keyboardDismissMode="interactive"
+          // The focused field scrolls above the keyboard instead of hiding behind it.
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
           refreshControl={
             onRefresh ? (
@@ -425,14 +435,15 @@ export function Sheet({
   // fades, so the dim layer never slides up with the sheet.
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(12, 28, 22, 0.42)' }}>
+      {/* The sheet rises with the keyboard, so fields and buttons stay visible while typing. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1 justify-end"
+        style={{ backgroundColor: 'rgba(12, 28, 22, 0.42)' }}
+      >
         <Pressable className="flex-1" onPress={onClose} accessibilityLabel="Close" />
         <Animated.View
-          entering={
-            reduced
-              ? FadeIn.duration(180)
-              : SlideInDown.duration(340).easing(EASE_SHEET)
-          }
+          entering={reduced ? FadeIn.duration(180) : SlideInDown.duration(340).easing(EASE_SHEET)}
           style={{ maxHeight: '85%' }}
         >
           <View
@@ -442,31 +453,35 @@ export function Sheet({
               { boxShadow: '0 -12px 40px -16px rgba(12, 28, 22, 0.35)' },
             ]}
           >
-          <View className="mb-2 items-center">
-            <View className="h-1.5 w-10 rounded-full bg-border" />
-          </View>
-          <View className="mb-3 flex-row items-center justify-between">
-            <Text
-              className="flex-1 text-lg font-bold text-foreground"
-              style={{ letterSpacing: -0.3 }}
+            <View className="mb-2 items-center">
+              <View className="h-1.5 w-10 rounded-full bg-border" />
+            </View>
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text
+                className="flex-1 text-lg font-bold text-foreground"
+                style={{ letterSpacing: -0.3 }}
+              >
+                {title}
+              </Text>
+              <PressScale
+                onPress={onClose}
+                hitSlop={10}
+                accessibilityLabel="Close"
+                className="h-8 w-8 items-center justify-center rounded-full bg-muted"
+              >
+                <X size={16} color={C.pine} strokeWidth={2.4} />
+              </PressScale>
+            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              showsVerticalScrollIndicator={false}
             >
-              {title}
-            </Text>
-            <PressScale
-              onPress={onClose}
-              hitSlop={10}
-              accessibilityLabel="Close"
-              className="h-8 w-8 items-center justify-center rounded-full bg-muted"
-            >
-              <X size={16} color={C.pine} strokeWidth={2.4} />
-            </PressScale>
-          </View>
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {children}
-          </ScrollView>
+              {children}
+            </ScrollView>
           </View>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -697,7 +712,10 @@ export function ToastHost() {
           accessibilityLiveRegion="polite"
           className="rounded-2xl px-4 py-3.5"
           style={[
-            { backgroundColor: current.tone === 'error' ? C.red : C.pine, borderCurve: 'continuous' },
+            {
+              backgroundColor: current.tone === 'error' ? C.red : C.pine,
+              borderCurve: 'continuous',
+            },
             { boxShadow: '0 10px 30px -10px rgba(12, 28, 22, 0.5)' },
           ]}
         >

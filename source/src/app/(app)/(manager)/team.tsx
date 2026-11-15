@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Check, Minus, Plus, Send, Share2, Sparkles, UserPlus } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { type ElementRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
@@ -536,7 +536,6 @@ export default function TeamScreen() {
         })}
       </View>
 
-
       <SectionTitle>Tools</SectionTitle>
       <Card>
         <View className="flex-row items-center justify-between gap-3">
@@ -681,7 +680,6 @@ export default function TeamScreen() {
         <Text className="mt-2 text-xs text-muted-foreground">{message}</Text>
       ) : null}
 
-
       <Sheet
         visible={Boolean(deactivateTarget)}
         onClose={() => setDeactivateTarget(null)}
@@ -739,6 +737,8 @@ function MemberSheet({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const emailRef = useRef<ElementRef<typeof TextInput>>(null);
+  const phoneRef = useRef<ElementRef<typeof TextInput>>(null);
   const [roles, setRoles] = useState<string[]>(['barista']);
   const [solo, setSolo] = useState(false);
   const [rating, setRating] = useState(3);
@@ -818,22 +818,36 @@ function MemberSheet({
         <TextInput
           value={name}
           onChangeText={setName}
+          autoCapitalize="words"
+          autoCorrect={false}
+          textContentType="none"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => emailRef.current?.focus()}
           placeholder="First name"
           placeholderTextColor={C.muted}
           className="rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground"
         />
         <TextInput
+          ref={emailRef}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="none"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => phoneRef.current?.focus()}
           keyboardType="email-address"
           placeholder="Email (for invites and reminders)"
           placeholderTextColor={C.muted}
           className="rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground"
         />
         <TextInput
+          ref={phoneRef}
           value={phone}
           onChangeText={setPhone}
+          textContentType="none"
           keyboardType="phone-pad"
           placeholder="Phone (optional)"
           placeholderTextColor={C.muted}
