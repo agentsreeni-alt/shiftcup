@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { ArrowLeft, CalendarClock, Check, Clock, Hourglass } from 'lucide-react-native';
+import { ArrowLeft, CalendarClock, Clock, Hourglass } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -134,6 +134,8 @@ export default function AvailabilityScreen() {
   );
 
   const pending = requests.filter((r) => r.status === 'pending');
+  // One open request at a time per kind, so nobody sends the same change twice.
+  const usualPending = pending.some((r) => r.scope === 'usual');
   const lastDecided = requests.find((r) => r.status === 'approved' || r.status === 'declined');
   const nextWeekRows = weekRows[nextWeek] ?? [];
   const nextWeekDiffers =
@@ -141,7 +143,10 @@ export default function AvailabilityScreen() {
     effectiveWeek(usual, nextWeekRows).some((d, i) => !usual || !sameDay(d, usual[i]));
 
   const startEdit = (scope: ChangeScope, weekStart = nextWeek) => {
-    const base = scope === 'usual' ? effectiveWeek(usual, []) : effectiveWeek(usual, weekRows[weekStart] ?? []);
+    const base =
+      scope === 'usual'
+        ? effectiveWeek(usual, [])
+        : effectiveWeek(usual, weekRows[weekStart] ?? []);
     setDraft(base.map(toDraft));
     setNote('');
     setMessage('');
@@ -402,10 +407,7 @@ export default function AvailabilityScreen() {
       <AppBar title="Availability" subtitle={cafeName ?? ''} />
 
       {askId && !askAnswered ? (
-        <View
-          className="mb-4 rounded-2xl bg-primary p-4"
-          style={{ borderCurve: 'continuous' }}
-        >
+        <View className="mb-4 rounded-2xl bg-primary p-4" style={{ borderCurve: 'continuous' }}>
           <View className="flex-row items-center gap-2">
             <Clock size={16} color={C.pistachio} />
             <Text className="flex-1 text-[15px] font-semibold text-primary-foreground">
@@ -417,7 +419,12 @@ export default function AvailabilityScreen() {
           </Text>
           <View className="mt-3 gap-2">
             {usual ? (
-              <Btn label="My usual week works" variant="accent" loading={busy} onPress={usualWorks} />
+              <Btn
+                label="My usual week works"
+                variant="accent"
+                loading={busy}
+                onPress={usualWorks}
+              />
             ) : null}
             <PressScale
               onPress={() => startEdit('week', nextWeek)}
@@ -431,22 +438,21 @@ export default function AvailabilityScreen() {
         </View>
       ) : null}
 
-      {message ? (
-        <View className="mb-3 flex-row items-center gap-2 rounded-xl bg-accent px-4 py-2.5">
-          <Check size={14} color={C.pine} />
-          <Text className="flex-1 text-xs font-semibold text-accent-foreground">{message}</Text>
-        </View>
-      ) : null}
       {error ? <Text className="mb-3 text-xs text-destructive">{error}</Text> : null}
 
       {pending.map((r) => {
-        const before = r.scope === 'usual' ? usual : effectiveWeek(usual, weekRows[r.week_start ?? ''] ?? []);
+        const before =
+          r.scope === 'usual' ? usual : effectiveWeek(usual, weekRows[r.week_start ?? ''] ?? []);
         const changes = changedDays(before, asWeek(r.days) ?? []);
         return (
           <View
             key={r.id}
             className="mb-3 rounded-2xl border p-4"
-            style={{ borderColor: '#EBD9B0', backgroundColor: '#FBF6E9', borderCurve: 'continuous' }}
+            style={{
+              borderColor: '#EBD9B0',
+              backgroundColor: '#FBF6E9',
+              borderCurve: 'continuous',
+            }}
           >
             <View className="flex-row items-center gap-2">
               <Hourglass size={15} color="#8A5A12" />
@@ -532,7 +538,11 @@ export default function AvailabilityScreen() {
             again every week.
           </Text>
         )}
-        {requestsReady ? (
+        {requestsReady && usualPending ? (
+          <Text className="mt-3 text-xs text-muted-foreground">
+            Your manager has your request. Withdraw it above if you want to change it.
+          </Text>
+        ) : requestsReady ? (
           <View className="mt-3">
             <Btn
               label={usual ? 'Ask to change my usual week' : 'Set my usual week'}
@@ -556,7 +566,9 @@ export default function AvailabilityScreen() {
             <Text className="mt-0.5 text-sm text-muted-foreground">
               {nextWeekDiffers
                 ? effectiveWeek(usual, nextWeekRows)
-                    .map((d, i) => (usual && sameDay(d, usual[i]) ? null : `${DAY_LONG[i]}: ${dayText(d)}`))
+                    .map((d, i) =>
+                      usual && sameDay(d, usual[i]) ? null : `${DAY_LONG[i]}: ${dayText(d)}`,
+                    )
                     .filter(Boolean)
                     .join('. ')
                 : usual
@@ -565,7 +577,11 @@ export default function AvailabilityScreen() {
             </Text>
           </View>
         </View>
-        {requestsReady || askId ? (
+        {pending.some((r) => r.scope === 'week' && r.week_start === nextWeek) ? (
+          <Text className="mt-3 text-xs text-muted-foreground">
+            Your change for this week is waiting for your manager.
+          </Text>
+        ) : requestsReady || askId ? (
           <View className="mt-3">
             <Btn
               label="Change one week only"
@@ -575,8 +591,8 @@ export default function AvailabilityScreen() {
           </View>
         ) : null}
         <Text className="mt-2 text-xs text-muted-foreground">
-          For a holiday, an exam or an appointment. Already on the schedule and cannot make a
-          shift? Use “I can’t make it” in My shifts.
+          For a holiday, an exam or an appointment. Already on the schedule and cannot make a shift?
+          Use “I can’t make it” in My shifts.
         </Text>
       </Card>
 
