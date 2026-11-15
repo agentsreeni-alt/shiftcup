@@ -159,15 +159,26 @@ export function Screen({
 export function AppBar({
   title,
   subtitle,
+  eyebrow,
   right,
 }: {
   title: string;
   subtitle?: string;
+  /** Small line above the title, e.g. today's date. */
+  eyebrow?: string;
   right?: React.ReactNode;
 }) {
   return (
     <View className="mb-4 flex-row items-start justify-between gap-3">
       <View className="flex-1">
+        {eyebrow ? (
+          <Text
+            className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground"
+            style={{ letterSpacing: 0.8 }}
+          >
+            {eyebrow}
+          </Text>
+        ) : null}
         <Text
           className="text-[28px] font-bold leading-[34px] text-foreground"
           style={{ letterSpacing: -0.6 }}
@@ -724,6 +735,149 @@ export function ToastHost() {
           </Text>
         </Pressable>
       </Animated.View>
+    </View>
+  );
+}
+
+// ---------- people ----------
+
+const AVATAR_TONES = [
+  { bg: C.solo, ink: C.soloInk },
+  { bg: C.barista, ink: C.baristaInk },
+  { bg: C.scooper, ink: C.scooperInk },
+  { bg: '#FBF3E2', ink: '#8A5A12' },
+  { bg: '#ECE8F6', ink: '#5B4A8B' },
+] as const;
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const first = parts[0][0] ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : '';
+  return (first + last).toUpperCase();
+}
+
+/** A round initials badge. The colour comes from the name, so a person keeps theirs everywhere. */
+export function Avatar({
+  name,
+  size = 32,
+  ring,
+}: {
+  name: string;
+  size?: number;
+  /** Ring colour so overlapping avatars stay separate (match the surface behind them). */
+  ring?: string;
+}) {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const tone = AVATAR_TONES[hash % AVATAR_TONES.length];
+  return (
+    <View
+      accessibilityLabel={name}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: tone.bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: ring ? 2 : 0,
+        borderColor: ring,
+      }}
+    >
+      <Text style={{ color: tone.ink, fontSize: size * 0.38, fontWeight: '700' }}>
+        {initials(name)}
+      </Text>
+    </View>
+  );
+}
+
+/** Overlapping avatars with a "+N" for the rest. */
+export function AvatarStack({
+  names,
+  max = 5,
+  size = 30,
+  ring = C.white,
+}: {
+  names: string[];
+  max?: number;
+  size?: number;
+  ring?: string;
+}) {
+  const shown = names.slice(0, max);
+  const rest = names.length - shown.length;
+  return (
+    <View className="flex-row items-center">
+      {shown.map((n, i) => (
+        <View key={`${n}-${i}`} style={{ marginLeft: i === 0 ? 0 : -size * 0.3 }}>
+          <Avatar name={n} size={size} ring={ring} />
+        </View>
+      ))}
+      {rest > 0 ? (
+        <View
+          style={{
+            marginLeft: -size * 0.3,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: 2,
+            borderColor: ring,
+            backgroundColor: C.border,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: C.pine, fontSize: size * 0.34, fontWeight: '700' }}>+{rest}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Content that rises in once when the screen first shows, staggered by `index`. */
+export function Appear({ index = 0, children }: { index?: number; children: React.ReactNode }) {
+  const reduced = useReducedMotion();
+  return (
+    <Animated.View
+      entering={
+        reduced
+          ? undefined
+          : FadeInDown.duration(360)
+              .delay(Math.min(index, 6) * 50)
+              .easing(EASE_OUT)
+      }
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+/** Tab icon with a soft pill behind it when selected, like iOS and Material 3 bars. */
+export function TabIcon({
+  icon: Icon,
+  color,
+  focused,
+}: {
+  icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+  color: unknown;
+  focused: boolean;
+}) {
+  const tint = typeof color === 'string' ? color : C.pine;
+  return (
+    <View
+      style={[
+        {
+          width: 54,
+          height: 30,
+          borderRadius: 15,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: focused ? '#E6F2D4' : 'transparent',
+        },
+        pressTransition,
+      ]}
+    >
+      <Icon size={21} color={tint} strokeWidth={focused ? 2.4 : 2} />
     </View>
   );
 }

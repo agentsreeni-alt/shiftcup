@@ -1,11 +1,11 @@
 import { useRouter } from 'expo-router';
-import { Eye, EyeOff } from 'lucide-react-native';
+import { Coffee, Eye, EyeOff, Lock, Mail } from 'lucide-react-native';
 import { type ElementRef, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/client/supabase';
-import { BackButton, Btn } from '@/components/kit';
+import { Appear, BackButton, Btn } from '@/components/kit';
 import { friendlyAuthError, looksLikeEmail } from '@/lib/auth-messages';
 import { C } from '@/lib/colors';
 import { useKeyboardSubmit } from '@/lib/useKeyboardSubmit';
@@ -24,6 +24,11 @@ export default function SignInScreen() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState('');
+  const [focus, setFocus] = useState<'email' | 'password' | null>(null);
+  const box = (f: 'email' | 'password') =>
+    `flex-row items-center gap-2 rounded-2xl border-[1.5px] bg-card pl-4 pr-2 ${
+      focus === f ? 'border-primary' : error ? 'border-destructive/60' : 'border-input'
+    }`;
 
   const forgot = async () => {
     setError('');
@@ -77,39 +82,68 @@ export default function SignInScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View className="gap-6">
-              <View className="gap-2">
-                <Text className="text-3xl font-bold text-foreground">Welcome back</Text>
-                <Text className="text-base text-muted-foreground">
-                  Sign in to see your café and your week.
-                </Text>
-              </View>
+              <Appear index={0}>
+                <View className="gap-4">
+                  <View
+                    className="h-14 w-14 items-center justify-center rounded-[18px]"
+                    style={{
+                      backgroundColor: C.pine,
+                      borderCurve: 'continuous',
+                      boxShadow: '0 12px 28px -12px rgba(20, 56, 44, 0.6)',
+                    }}
+                  >
+                    <Coffee size={26} color={C.pistachio} strokeWidth={2.2} />
+                  </View>
+                  <View className="gap-1.5">
+                    <Text
+                      className="text-[32px] font-bold leading-[38px] text-foreground"
+                      style={{ letterSpacing: -0.8 }}
+                    >
+                      Welcome back
+                    </Text>
+                    <Text className="text-base text-muted-foreground">
+                      Sign in to see your café and your week.
+                    </Text>
+                  </View>
+                </View>
+              </Appear>
 
               <View className="gap-4">
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Email</Text>
-                  <TextInput
-                    ref={emailRef}
-                    value={email}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => passwordRef.current?.focus()}
-                    textContentType="emailAddress"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    placeholder="you@cafe.com"
-                    placeholderTextColor={C.muted}
-                    className="rounded-xl border border-input bg-card px-4 py-3.5 text-base text-foreground"
-                  />
+                  <View className={box('email')} style={{ borderCurve: 'continuous' }}>
+                    <Mail size={18} color={focus === 'email' ? C.pine : C.muted} />
+                    <TextInput
+                      ref={emailRef}
+                      onFocus={() => setFocus('email')}
+                      onBlur={() => setFocus(null)}
+                      value={email}
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => passwordRef.current?.focus()}
+                      textContentType="emailAddress"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      keyboardType="email-address"
+                      placeholder="you@cafe.com"
+                      placeholderTextColor={C.muted}
+                      className="flex-1 py-3.5 pr-2 text-base text-foreground"
+                      style={{ outlineStyle: 'none' } as object}
+                    />
+                  </View>
                 </View>
                 <View className="gap-1.5">
                   <Text className="text-sm font-medium text-foreground">Password</Text>
-                  <View className="flex-row items-center rounded-xl border border-input bg-card pr-2">
+                  <View className={box('password')} style={{ borderCurve: 'continuous' }}>
+                    <Lock size={18} color={focus === 'password' ? C.pine : C.muted} />
                     <TextInput
                       ref={passwordRef}
+                      onFocus={() => setFocus('password')}
+                      onBlur={() => setFocus(null)}
+                      style={{ outlineStyle: 'none' } as object}
                       value={password}
                       textContentType="password"
                       onChangeText={setPassword}
@@ -118,7 +152,7 @@ export default function SignInScreen() {
                       placeholderTextColor={C.muted}
                       returnKeyType="go"
                       onSubmitEditing={onKeyboardSubmit}
-                      className="flex-1 px-4 py-3.5 text-base text-foreground"
+                      className="flex-1 py-3.5 pr-2 text-base text-foreground"
                     />
                     <Pressable
                       onPress={() => setShow((s) => !s)}

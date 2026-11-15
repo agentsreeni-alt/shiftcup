@@ -4,9 +4,13 @@ import {
   ArrowRight,
   Bell,
   CalendarCheck,
+  Check,
   CheckCircle2,
-  Clock,
+  ChevronRight,
+  Send,
+  Sparkles,
   Users,
+  Wallet,
 } from 'lucide-react-native';
 import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
@@ -14,8 +18,9 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { ChangeRequests } from '@/components/ChangeRequests';
 import {
   AppBar,
+  Appear,
+  AvatarStack,
   Btn,
-  Card,
   Notice,
   PressScale,
   Screen,
@@ -26,6 +31,7 @@ import { planningWeekStart, publishWeek, saveAssignments, sendWeeklyRequest } fr
 import { useApp } from '@/lib/app-context';
 import { isReachable } from '@/lib/invite';
 import { C } from '@/lib/colors';
+import { cardShadow } from '@/lib/motion';
 import { DAY_SHORT, fmtHours, fmtMoney, fmtWeekLabel } from '@/lib/dates';
 import { fillOpenSlots } from '@/lib/scheduling';
 import type { Assignment, CafeSettings } from '@/lib/types';
@@ -226,11 +232,48 @@ export default function TodayScreen() {
     );
   }
 
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const dateLine = now.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const readyCount = activeEmployees.length - waiting.length;
+  const headline =
+    step === 0
+      ? 'Set up how your week runs'
+      : step === 1
+        ? 'Ready to draft'
+        : step === 2
+          ? `${issueCount} ${issueCount === 1 ? 'decision' : 'decisions'} left`
+          : step === 3
+            ? changedSincePublish
+              ? 'Changes to send'
+              : 'Ready to publish'
+            : 'Week published';
+
   return (
     <Screen onRefresh={data.reload}>
       <AppBar
+        eyebrow={`${greeting} · ${dateLine}`}
         title={cafeName || 'Your café'}
-        subtitle={`Planning next week · ${fmtWeekLabel(weekStart)}`}
+        right={
+          cafe && !isSample && cafe.subscription_status === 'trial' && hasAccess ? (
+            <PressScale
+              onPress={() => router.push('/(app)/billing')}
+              accessibilityLabel={`Free trial, ${trialDaysLeft} days left. View plans`}
+              className="mt-1 flex-row items-center gap-1.5 rounded-full bg-card px-3 py-1.5"
+              style={cardShadow}
+            >
+              <Sparkles size={13} color={C.pine} />
+              <Text className="text-xs font-semibold text-foreground">
+                Trial · {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'}
+              </Text>
+            </PressScale>
+          ) : undefined
+        }
       />
 
       {isSample ? (
@@ -261,81 +304,104 @@ export default function TodayScreen() {
         </View>
       ) : null}
 
-      {cafe && !isSample && cafe.subscription_status === 'trial' && hasAccess ? (
-        <View className="mb-3 flex-row items-center gap-2 rounded-xl bg-card px-4 py-2.5">
-          <Clock size={14} color={C.pine} />
-          <Text className="flex-1 text-xs font-semibold text-foreground">
-            Free trial: {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
-          </Text>
-        </View>
-      ) : null}
-
-      <Card>
-        <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-base font-semibold text-foreground">Next week</Text>
-          <Text className="text-xs font-semibold text-muted-foreground">
-            {step >= 4 ? 'Published' : `Step ${Math.min(step + 1, 4)} of 4`}
-          </Text>
-        </View>
-        <View className="mb-3 flex-row gap-1.5">
-          {STEPS.map((s, i) => (
-            <View key={s} className="flex-1 gap-1">
-              <View
-                className={`h-1.5 rounded-full ${
-                  i < step || step >= 4 ? 'bg-primary' : i === step ? 'bg-accent' : 'bg-border'
-                }`}
-              />
-              <Text
-                className={`text-[10px] font-semibold ${
-                  i <= step ? 'text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                {s}
-              </Text>
-            </View>
-          ))}
-        </View>
-        <Text className="mb-3 text-sm text-muted-foreground">
-          {step === 0
-            ? 'Set when each person can usually work, and ShiftCup drafts every week from that. Or ask your team for next week.'
-            : step === 1 && !hasRequest
-              ? noUsual.length === 0
-                ? 'Drafts use everyone’s usual week. Build it, adjust, then publish to send everyone their shifts.'
-                : `Drafts use each person’s usual week. ${noUsual.map((e) => e.name).join(', ')} ${
-                    noUsual.length === 1 ? 'has' : 'have'
-                  } none yet, so they will not be scheduled.`
-              : step === 1
-                ? waiting.length === 0
-                  ? 'Everyone answered. Build the draft and ShiftCup fills what it can.'
-                  : `${waiting.length} still ${waiting.length === 1 ? 'has' : 'have'} not answered. You can build the draft now and fill them in later.`
-                : step === 2
-                  ? `${issueCount} ${issueCount === 1 ? 'thing needs' : 'things need'} a decision before you publish.`
-                  : step === 3
-                    ? changedSincePublish
-                      ? 'You changed the week after publishing. Publish again so your team sees it.'
-                      : 'No gaps and no clashes. Publish when you are ready.'
-                    : data.gaps.length > 0
-                      ? `Published. Your team has their shifts. ${data.gaps.length} ${
-                          data.gaps.length === 1 ? 'slot is' : 'slots are'
-                        } still open.`
-                      : 'Published. Your team has their shifts.'}
-        </Text>
-        <Btn label={nextLabel} loading={busy} onPress={nextAction} />
-        {hasAccess && !hasRequest && step <= 1 ? (
-          <View className="mt-2">
-            <Btn
-              label="Ask my team for next week"
-              variant="ghost"
-              loading={busy}
-              onPress={runSendRequest}
-            />
+      {/* Hero: where next week stands and the one thing to do next. */}
+      <Appear index={0}>
+        <View
+          className="overflow-hidden rounded-[24px] p-5"
+          style={[
+            { backgroundColor: C.pine, borderCurve: 'continuous' },
+            { boxShadow: '0 18px 40px -18px rgba(20, 56, 44, 0.55)' },
+          ]}
+        >
+          {/* Soft glow in the corner gives the card depth without an image. */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              right: -60,
+              top: -80,
+              width: 220,
+              height: 220,
+              borderRadius: 110,
+              backgroundColor: C.pistachio,
+              opacity: 0.12,
+            }}
+          />
+          <View className="flex-row items-center justify-between">
+            <Text
+              className="text-[11px] font-semibold uppercase"
+              style={{ color: C.pistachio, letterSpacing: 0.8 }}
+            >
+              Next week · {fmtWeekLabel(weekStart)}
+            </Text>
+            <Text className="text-xs font-semibold" style={{ color: 'rgba(242,245,236,0.6)' }}>
+              {step >= 4 ? 'Done' : `Step ${Math.min(step + 1, 4)} of 4`}
+            </Text>
           </View>
-        ) : null}
-        {message ? <Text className="mt-2 text-xs text-muted-foreground">{message}</Text> : null}
-      </Card>
+          <Text
+            className="mt-2 text-[26px] font-bold leading-[31px]"
+            style={{ color: C.cream, letterSpacing: -0.6 }}
+          >
+            {headline}
+          </Text>
+
+          <StepTrack step={step} />
+
+          <Text className="mb-4 text-sm leading-5" style={{ color: 'rgba(242,245,236,0.78)' }}>
+            {step === 0
+              ? 'Set when each person can usually work, and ShiftCup drafts every week from that. Or ask your team for next week.'
+              : step === 1 && !hasRequest
+                ? noUsual.length === 0
+                  ? 'Drafts use everyone’s usual week. Build it, adjust, then publish to send everyone their shifts.'
+                  : `Drafts use each person’s usual week. ${noUsual.map((e) => e.name).join(', ')} ${
+                      noUsual.length === 1 ? 'has' : 'have'
+                    } none yet, so they will not be scheduled.`
+                : step === 1
+                  ? waiting.length === 0
+                    ? 'Everyone answered. Build the draft and ShiftCup fills what it can.'
+                    : `${waiting.length} still ${waiting.length === 1 ? 'has' : 'have'} not answered. You can build the draft now and fill them in later.`
+                  : step === 2
+                    ? 'Open slots or clashes need a decision before you publish.'
+                    : step === 3
+                      ? changedSincePublish
+                        ? 'You changed the week after publishing. Publish again so your team sees it.'
+                        : 'No gaps and no clashes. Publish when you are ready.'
+                      : data.gaps.length > 0
+                        ? `Your team has their shifts. ${data.gaps.length} ${
+                            data.gaps.length === 1 ? 'slot is' : 'slots are'
+                          } still open.`
+                        : 'Your team has their shifts by email and in the app.'}
+          </Text>
+          <Btn
+            label={nextLabel}
+            variant="accent"
+            size="lg"
+            loading={busy}
+            onPress={nextAction}
+            icon={busy ? undefined : <ArrowRight size={18} color={C.pine} />}
+          />
+          {hasAccess && !hasRequest && step <= 1 ? (
+            <PressScale
+              onPress={runSendRequest}
+              disabled={busy}
+              className="mt-2 flex-row items-center justify-center gap-2 rounded-xl py-3"
+            >
+              <Send size={15} color={C.cream} />
+              <Text className="text-sm font-semibold" style={{ color: C.cream }}>
+                Ask my team for next week
+              </Text>
+            </PressScale>
+          ) : null}
+          {message ? (
+            <Text className="mt-2 text-xs" style={{ color: 'rgba(242,245,236,0.8)' }}>
+              {message}
+            </Text>
+          ) : null}
+        </View>
+      </Appear>
 
       {data.changeRequests.length > 0 ? (
-        <>
+        <Appear index={1}>
           <SectionTitle>
             {data.changeRequests.length === 1
               ? '1 request from your team'
@@ -350,99 +416,234 @@ export default function TodayScreen() {
               toast(text);
             }}
           />
-        </>
+        </Appear>
       ) : null}
 
-      <SectionTitle>Needs attention</SectionTitle>
-      <View className="gap-2">
-        {attentionCount === 0 ? (
-          <View className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5">
+      <Appear index={2}>
+        <SectionTitle>Needs attention</SectionTitle>
+        <View className="gap-2">
+          {attentionCount === 0 ? (
             <View
-              className="h-9 w-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: C.solo }}
+              className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5"
+              style={cardShadow}
             >
-              <CheckCircle2 size={17} color={C.soloInk} />
+              <View
+                className="h-10 w-10 items-center justify-center rounded-full"
+                style={{ backgroundColor: C.solo }}
+              >
+                <CheckCircle2 size={18} color={C.soloInk} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-foreground">All clear</Text>
+                <Text className="text-xs text-muted-foreground">
+                  Nothing is waiting on you for next week.
+                </Text>
+              </View>
             </View>
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-foreground">All clear</Text>
-              <Text className="text-xs text-muted-foreground">
-                Nothing is waiting on you for next week.
-              </Text>
-            </View>
-          </View>
-        ) : null}
-        {coverDays.length > 0 ? (
-          <AttentionRow
-            icon={<Bell size={16} color={C.red} />}
-            title={
-              coverDays.length === 1 ? 'Someone can’t make a shift' : 'People can’t make shifts'
-            }
-            value={coverDays.length}
-            detail={coverDays
-              .map((c) => `${c.name} (${DAY_SHORT[c.weekday]})${c.note ? `: “${c.note}”` : ''}`)
-              .join(', ')}
-            onPress={() => router.push('/(app)/(manager)/schedule')}
-          />
-        ) : null}
-        {waiting.length > 0 ? (
-          <AttentionRow
-            icon={<Users size={16} color={C.red} />}
-            title={hasRequest ? 'Have not answered' : 'No usual week yet'}
-            value={waiting.length}
-            detail={
-              hasRequest
-                ? waiting.map((e) => e.name).join(', ')
-                : `Set one for ${waiting.map((e) => e.name).join(', ')} in Team.`
-            }
+          ) : null}
+          {coverDays.length > 0 ? (
+            <AttentionRow
+              icon={<Bell size={17} color={C.red} />}
+              title={
+                coverDays.length === 1 ? 'Someone can’t make a shift' : 'People can’t make shifts'
+              }
+              value={coverDays.length}
+              detail={coverDays
+                .map((c) => `${c.name} (${DAY_SHORT[c.weekday]})${c.note ? `: “${c.note}”` : ''}`)
+                .join(', ')}
+              people={coverDays.map((c) => c.name)}
+              onPress={() => router.push('/(app)/(manager)/schedule')}
+            />
+          ) : null}
+          {waiting.length > 0 ? (
+            <AttentionRow
+              icon={<Users size={17} color={C.red} />}
+              title={hasRequest ? 'Have not answered yet' : 'No usual week yet'}
+              value={waiting.length}
+              detail={
+                hasRequest
+                  ? `${readyCount} of ${activeEmployees.length} ready · ${waiting
+                      .map((e) => e.name)
+                      .join(', ')}`
+                  : `Set one for ${waiting.map((e) => e.name).join(', ')} in Team.`
+              }
+              people={waiting.map((e) => e.name)}
+              progress={
+                activeEmployees.length > 0 ? readyCount / activeEmployees.length : undefined
+              }
+              onPress={() => router.push('/(app)/(manager)/team')}
+            />
+          ) : null}
+          {openSlots > 0 ? (
+            <AttentionRow
+              icon={<AlertTriangle size={17} color={C.red} />}
+              title="Open slots"
+              value={openSlots}
+              detail={data.gaps
+                .slice(0, 3)
+                .map((g) => g.label)
+                .join(', ')}
+              onPress={() => router.push('/(app)/(manager)/schedule')}
+            />
+          ) : null}
+          {data.clashes.length > 0 ? (
+            <AttentionRow
+              icon={<AlertTriangle size={17} color={C.red} />}
+              title="No longer fit their shift"
+              value={data.clashes.length}
+              detail={data.clashes
+                .slice(0, 3)
+                .map((c) => `${c.employeeName}: ${c.reason}`)
+                .join(', ')}
+              people={data.clashes.map((c) => c.employeeName)}
+              onPress={() => router.push('/(app)/(manager)/schedule')}
+            />
+          ) : null}
+        </View>
+      </Appear>
+
+      <Appear index={3}>
+        <SectionTitle>Next week at a glance</SectionTitle>
+        <View className="flex-row gap-2">
+          <StatTile
+            icon={<Users size={16} color={C.baristaInk} />}
+            tint={C.barista}
+            value={String(activeEmployees.length)}
+            label={activeEmployees.length === 1 ? 'Person on the team' : 'People on the team'}
             onPress={() => router.push('/(app)/(manager)/team')}
           />
-        ) : null}
-        {openSlots > 0 ? (
-          <AttentionRow
-            icon={<AlertTriangle size={16} color={C.red} />}
-            title="Open slots"
-            value={openSlots}
-            detail={data.gaps
-              .slice(0, 3)
-              .map((g) => g.label)
-              .join(', ')}
+          <StatTile
+            icon={<CalendarCheck size={16} color={C.soloInk} />}
+            tint={C.solo}
+            value={hasDraft ? fmtHours(data.totalMinutes) : '—'}
+            label={hasDraft ? 'Scheduled hours' : 'Hours after the draft'}
             onPress={() => router.push('/(app)/(manager)/schedule')}
           />
-        ) : null}
-        {data.clashes.length > 0 ? (
-          <AttentionRow
-            icon={<AlertTriangle size={16} color={C.red} />}
-            title="No longer fit their shift"
-            value={data.clashes.length}
-            detail={data.clashes
-              .slice(0, 3)
-              .map((c) => `${c.employeeName}: ${c.reason}`)
-              .join(', ')}
+          <StatTile
+            icon={<Wallet size={16} color={C.scooperInk} />}
+            tint={C.scooper}
+            value={hasDraft ? fmtMoney(Math.round(data.totalWages)).replace(/\.00$/, '') : '—'}
+            label={hasDraft ? 'Wages for the week' : 'Wages after the draft'}
             onPress={() => router.push('/(app)/(manager)/schedule')}
           />
-        ) : null}
-      </View>
-
-      <SectionTitle>Next week at a glance</SectionTitle>
-      <View className="flex-row gap-2">
-        <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
-          <CalendarCheck size={16} color={C.pine} />
-          <Text className="mt-2 text-2xl font-bold text-foreground">
-            {fmtHours(data.totalMinutes)}
-          </Text>
-          <Text className="text-xs text-muted-foreground">Scheduled hours</Text>
         </View>
-        <View className="flex-1 rounded-2xl border border-border/60 bg-card shadow-card p-4">
-          <Clock size={16} color={C.pine} />
-          <Text className="mt-2 text-2xl font-bold text-foreground">
-            {fmtMoney(data.totalWages)}
-          </Text>
-          <Text className="text-xs text-muted-foreground">Wages for the week</Text>
-        </View>
-      </View>
+      </Appear>
 
       {data.error ? <Text className="mt-4 text-sm text-destructive">{data.error}</Text> : null}
     </Screen>
+  );
+}
+
+/** Four steps as dots joined by a line: done ones get a tick, the current one a ring. */
+function StepTrack({ step }: { step: number }) {
+  return (
+    <View className="my-5">
+      <View className="flex-row items-center">
+        {STEPS.map((s, i) => {
+          const done = i < step || step >= 4;
+          const current = i === step && step < 4;
+          return (
+            <View key={s} className="flex-1 flex-row items-center">
+              {i > 0 ? (
+                <View
+                  className="h-[2px] flex-1"
+                  style={{
+                    backgroundColor: done || current ? C.pistachio : 'rgba(242,245,236,0.18)',
+                  }}
+                />
+              ) : (
+                <View className="flex-1" />
+              )}
+              <View
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 13,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: done ? C.pistachio : current ? C.pine : 'rgba(242,245,236,0.10)',
+                  borderWidth: current ? 2 : 0,
+                  borderColor: C.pistachio,
+                }}
+              >
+                {done ? (
+                  <Check size={14} color={C.pine} strokeWidth={3} />
+                ) : (
+                  <Text
+                    className="text-[11px] font-bold"
+                    style={{ color: current ? C.pistachio : 'rgba(242,245,236,0.5)' }}
+                  >
+                    {i + 1}
+                  </Text>
+                )}
+              </View>
+              {i < STEPS.length - 1 ? (
+                <View
+                  className="h-[2px] flex-1"
+                  style={{ backgroundColor: done ? C.pistachio : 'rgba(242,245,236,0.18)' }}
+                />
+              ) : (
+                <View className="flex-1" />
+              )}
+            </View>
+          );
+        })}
+      </View>
+      <View className="mt-2 flex-row">
+        {STEPS.map((s, i) => (
+          <Text
+            key={s}
+            className="flex-1 text-center text-[11px] font-semibold"
+            style={{
+              color: i <= step || step >= 4 ? C.cream : 'rgba(242,245,236,0.45)',
+            }}
+          >
+            {s}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function StatTile({
+  icon,
+  tint,
+  value,
+  label,
+  onPress,
+}: {
+  icon: React.ReactNode;
+  tint: string;
+  value: string;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <PressScale
+      onPress={onPress}
+      accessibilityLabel={`${label}: ${value === '—' ? 'not yet' : value}`}
+      className="flex-1 rounded-2xl border border-border/60 bg-card p-3.5"
+      style={[{ borderCurve: 'continuous' }, cardShadow]}
+    >
+      <View
+        className="h-8 w-8 items-center justify-center rounded-full"
+        style={{ backgroundColor: tint }}
+      >
+        {icon}
+      </View>
+      <Text
+        className="mt-3 text-[21px] font-bold text-foreground"
+        style={{ letterSpacing: -0.5, fontVariant: ['tabular-nums'] }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+      <Text className="text-[11px] leading-[14px] text-muted-foreground" numberOfLines={2}>
+        {label}
+      </Text>
+    </PressScale>
   );
 }
 
@@ -451,40 +652,58 @@ function AttentionRow({
   title,
   value,
   detail,
+  people,
+  progress,
   onPress,
 }: {
   icon: React.ReactNode;
   title: string;
   value: number;
   detail: string;
+  people?: string[];
+  progress?: number;
   onPress: () => void;
 }) {
-  const clear = value === 0;
   return (
     <PressScale
       onPress={onPress}
-      className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card shadow-card px-4 py-3"
+      className="rounded-2xl border border-border/60 bg-card px-4 py-3.5"
+      style={[{ borderCurve: 'continuous' }, cardShadow]}
     >
-      <View
-        className="h-9 w-9 items-center justify-center rounded-full"
-        style={{ backgroundColor: clear ? C.solo : C.redSoft }}
-      >
-        {icon}
-      </View>
-      <View className="flex-1">
-        <Text className="text-sm font-semibold text-foreground">{title}</Text>
-        <Text className="text-xs text-muted-foreground" numberOfLines={2}>
-          {detail}
-        </Text>
-      </View>
-      <View className="flex-row items-center gap-1">
-        <Text
-          className={`text-base font-bold ${clear ? 'text-muted-foreground' : 'text-destructive'}`}
+      <View className="flex-row items-center gap-3">
+        <View
+          className="h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: C.redSoft }}
         >
-          {value}
-        </Text>
-        <ArrowRight size={14} color={C.muted} />
+          {icon}
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-foreground">{title}</Text>
+          <Text className="text-xs text-muted-foreground" numberOfLines={2}>
+            {detail}
+          </Text>
+        </View>
+        <View
+          className="min-w-[28px] items-center rounded-full px-2 py-0.5"
+          style={{ backgroundColor: C.redSoft }}
+        >
+          <Text className="text-sm font-bold text-destructive">{value}</Text>
+        </View>
+        <ChevronRight size={16} color={C.muted} />
       </View>
+      {people && people.length > 0 ? (
+        <View className="mt-3 flex-row items-center gap-3 pl-[52px]">
+          <AvatarStack names={people} max={6} size={28} />
+          {progress !== undefined ? (
+            <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <View
+                className="h-full rounded-full"
+                style={{ width: `${Math.round(progress * 100)}%`, backgroundColor: C.soloInk }}
+              />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </PressScale>
   );
 }

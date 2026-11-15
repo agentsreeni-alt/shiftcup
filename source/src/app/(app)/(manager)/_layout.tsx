@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { CalendarDays, Settings, Sun, Users } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Loading } from '@/components/kit';
+import { Loading, TabIcon } from '@/components/kit';
 import { loadCoverRequests, loadPendingAvailabilityRequests, onInboxChanged } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C } from '@/lib/colors';
+import { tickSelection } from '@/lib/haptics';
 
 export const unstable_settings = { anchor: 'today' };
 
@@ -27,7 +28,9 @@ export default function ManagerLayout() {
           loadPendingAvailabilityRequests(cafeId),
           loadCoverRequests(cafeId),
         ]);
-        const coverDays = new Set(covers.map((c) => `${c.employee_id}:${c.week_start}:${c.weekday}`));
+        const coverDays = new Set(
+          covers.map((c) => `${c.employee_id}:${c.week_start}:${c.weekday}`),
+        );
         if (alive) setWaiting(asks.length + coverDays.size);
       } catch {
         // The badge is a hint only; the Today screen shows the real state.
@@ -50,6 +53,8 @@ export default function ManagerLayout() {
   return (
     <Tabs
       backBehavior="initialRoute"
+      // A light tick on every tab switch, like native apps.
+      screenListeners={{ tabPress: () => tickSelection() }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.pine,
@@ -62,8 +67,10 @@ export default function ManagerLayout() {
           boxShadow: '0 -1px 0 rgba(20, 56, 44, 0.06), 0 -8px 24px -12px rgba(20, 56, 44, 0.14)',
           height: 64 + insets.bottom,
           paddingBottom: insets.bottom + 6,
-          paddingTop: 8,
+          paddingTop: 6,
         },
+        // Icon above label at every width (tablets and browsers otherwise put them side by side).
+        tabBarLabelPosition: 'below-icon',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
       }}
     >
@@ -73,28 +80,36 @@ export default function ManagerLayout() {
           title: 'Today',
           tabBarBadge: waiting > 0 ? waiting : undefined,
           tabBarBadgeStyle: { backgroundColor: C.red, color: C.white, fontSize: 11 },
-          tabBarIcon: ({ color, size }) => <Sun size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon icon={Sun} color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="schedule"
         options={{
           title: 'Schedule',
-          tabBarIcon: ({ color, size }) => <CalendarDays size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon icon={CalendarDays} color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="team"
         options={{
           title: 'Team',
-          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon icon={Users} color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon icon={Settings} color={color} focused={focused} />
+          ),
         }}
       />
     </Tabs>
