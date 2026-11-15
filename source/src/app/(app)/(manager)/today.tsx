@@ -68,14 +68,14 @@ export default function TodayScreen() {
           {
             name: data.employees.find((e) => e.id === c.employee_id)?.name ?? 'Someone',
             weekday: c.weekday,
+            note: c.note?.trim() || null,
           },
         ]),
     ).values(),
   ];
   // Before a draft exists every slot is open; that is the next step, not a problem.
   const openSlots = data.assignments.some((a) => a.employee_id) ? data.gaps.length : 0;
-  const attentionCount =
-    coverDays.length + waiting.length + openSlots + data.clashes.length;
+  const attentionCount = coverDays.length + waiting.length + openSlots + data.clashes.length;
   const filledCount = data.assignments.filter((a) => a.employee_id).length;
   const hasRequest = Boolean(data.request);
   // People with a usual week can be scheduled without asking them first.
@@ -374,9 +374,13 @@ export default function TodayScreen() {
         {coverDays.length > 0 ? (
           <AttentionRow
             icon={<Bell size={16} color={C.red} />}
-            title={coverDays.length === 1 ? 'Someone can’t make a shift' : 'People can’t make shifts'}
+            title={
+              coverDays.length === 1 ? 'Someone can’t make a shift' : 'People can’t make shifts'
+            }
             value={coverDays.length}
-            detail={coverDays.map((c) => `${c.name} (${DAY_SHORT[c.weekday]})`).join(', ')}
+            detail={coverDays
+              .map((c) => `${c.name} (${DAY_SHORT[c.weekday]})${c.note ? `: “${c.note}”` : ''}`)
+              .join(', ')}
             onPress={() => router.push('/(app)/(manager)/schedule')}
           />
         ) : null}

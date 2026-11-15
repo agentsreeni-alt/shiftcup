@@ -244,7 +244,9 @@ export default function ScheduleScreen() {
         ? result.notified === 0
           ? 'Published. Nobody’s own shifts changed, so no new messages went out.'
           : `Published. ${result.notified} ${
-              result.notified === 1 ? 'person whose shifts changed was' : 'people whose shifts changed were'
+              result.notified === 1
+                ? 'person whose shifts changed was'
+                : 'people whose shifts changed were'
             } told.`
         : 'Published. Everyone working has been sent their shifts.';
       setMessage(
@@ -510,7 +512,11 @@ export default function ScheduleScreen() {
                   }, ${fmtMoney(data.totalWages)} in wages. Your team sees nothing until you publish.`}
             </Text>
             <Btn
-              label={status === 'Changed since published' ? 'Review and publish changes' : 'Review and publish'}
+              label={
+                status === 'Changed since published'
+                  ? 'Review and publish changes'
+                  : 'Review and publish'
+              }
               loading={busy && reviewOpen}
               onPress={openReview}
             />
@@ -561,7 +567,17 @@ export default function ScheduleScreen() {
                   ) : null}
                   {g.reason === 'cover' ? (
                     <Text className="mt-0.5 text-xs text-destructive">
-                      {g.employeeName} asked for cover.
+                      {g.employeeName} asked for cover
+                      {(() => {
+                        const note = data.coverRequests.find(
+                          (c) =>
+                            c.employee_id === g.employeeId &&
+                            c.weekday === g.weekday &&
+                            c.week_start === weekStart &&
+                            c.note?.trim(),
+                        )?.note;
+                        return note ? `: “${note.trim()}”` : '.';
+                      })()}
                     </Text>
                   ) : null}
                   {g.reason === 'deactivated' ? (

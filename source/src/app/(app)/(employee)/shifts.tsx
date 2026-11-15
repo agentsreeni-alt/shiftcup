@@ -48,12 +48,7 @@ import { leadLabel } from '@/lib/reminders';
 import { cardShadow } from '@/lib/motion';
 import { SLOT_LABEL } from '@/lib/types';
 import type { EngineAssignment } from '@/lib/scheduling';
-import type {
-  Assignment,
-  CafeSettings,
-  CoverRequest,
-  PublishedSchedule,
-} from '@/lib/types';
+import type { Assignment, CafeSettings, CoverRequest, PublishedSchedule } from '@/lib/types';
 
 /** The published week as the grid needs it. Drafts are never shown to employees. */
 function fromSnapshot(pub: PublishedSchedule | null): EngineAssignment[] | null {
@@ -132,7 +127,9 @@ function whenLabel(s: Shift, now: Date): string {
   if (shiftStart(s) <= now) return 'On now';
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
-  const days = Math.floor((dateForWeekday(s.week_start, s.weekday).getTime() - midnight.getTime()) / DAY_MS);
+  const days = Math.floor(
+    (dateForWeekday(s.week_start, s.weekday).getTime() - midnight.getTime()) / DAY_MS,
+  );
   if (days <= 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;
@@ -312,8 +309,13 @@ export default function MyShiftsScreen() {
                   {past ? (
                     <Text className="text-xs font-medium text-muted-foreground">Done</Text>
                   ) : covered ? (
-                    <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: C.redSoft }}>
-                      <Text className="text-[11px] font-semibold text-destructive">Cover asked</Text>
+                    <View
+                      className="rounded-full px-2.5 py-1"
+                      style={{ backgroundColor: C.redSoft }}
+                    >
+                      <Text className="text-[11px] font-semibold text-destructive">
+                        Cover asked
+                      </Text>
                     </View>
                   ) : (
                     <ChevronRight size={16} color={C.muted} />
@@ -327,7 +329,9 @@ export default function MyShiftsScreen() {
     );
   };
 
-  const confirmCovered = confirm ? covers.some((c) => confirm.ids.includes(c.assignment_id)) : false;
+  const confirmCovered = confirm
+    ? covers.some((c) => confirm.ids.includes(c.assignment_id))
+    : false;
   const confirmWith = confirm ? workingWith(confirm) : [];
 
   return (
@@ -366,10 +370,15 @@ export default function MyShiftsScreen() {
           scale={0.99}
           onPress={() => setConfirm(upNext)}
           className="mb-4 rounded-3xl bg-primary p-5"
-          style={[{ borderCurve: 'continuous' }, { boxShadow: '0 14px 30px -16px rgba(20, 56, 44, 0.55)' }]}
+          style={[
+            { borderCurve: 'continuous' },
+            { boxShadow: '0 14px 30px -16px rgba(20, 56, 44, 0.55)' },
+          ]}
         >
           <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-semibold text-primary-foreground/70">Your next shift</Text>
+            <Text className="text-xs font-semibold text-primary-foreground/70">
+              Your next shift
+            </Text>
             <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: C.pistachio }}>
               <Text className="text-[11px] font-bold" style={{ color: C.pine }}>
                 {whenLabel(upNext, now)}
@@ -380,7 +389,8 @@ export default function MyShiftsScreen() {
             className="mt-2 text-[26px] font-bold leading-[30px] text-primary-foreground"
             style={{ letterSpacing: -0.5 }}
           >
-            {DAY_LONG[upNext.weekday]}, {fmtDayDate(upNext.week_start, upNext.weekday).replace(/^\w{3} /, '')}
+            {DAY_LONG[upNext.weekday]},{' '}
+            {fmtDayDate(upNext.week_start, upNext.weekday).replace(/^\w{3} /, '')}
           </Text>
           <Text
             className="mt-1 text-lg font-semibold text-primary-foreground"
@@ -396,6 +406,16 @@ export default function MyShiftsScreen() {
                 ? ', on your own'
                 : ''}
           </Text>
+          {covers.some((c) => upNext.ids.includes(c.assignment_id)) ? (
+            <View
+              className="mt-3 self-start rounded-full px-2.5 py-1"
+              style={{ backgroundColor: C.redSoft }}
+            >
+              <Text className="text-[11px] font-bold" style={{ color: C.red }}>
+                You asked for cover. You stay on it until your manager changes it.
+              </Text>
+            </View>
+          ) : null}
         </PressScale>
       ) : null}
 
@@ -478,7 +498,11 @@ export default function MyShiftsScreen() {
       <Sheet
         visible={Boolean(confirm)}
         onClose={() => setConfirm(null)}
-        title={confirm ? `${DAY_LONG[confirm.weekday]}, ${fmtDayDate(confirm.week_start, confirm.weekday).replace(/^\w{3} /, '')}` : ''}
+        title={
+          confirm
+            ? `${DAY_LONG[confirm.weekday]}, ${fmtDayDate(confirm.week_start, confirm.weekday).replace(/^\w{3} /, '')}`
+            : ''
+        }
       >
         <View className="gap-3 pb-4">
           {confirm ? (
