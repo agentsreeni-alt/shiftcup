@@ -5,6 +5,8 @@ import { Text, View } from 'react-native';
 
 import {
   AppBar,
+  Appear,
+  AvatarStack,
   Btn,
   EmptyState,
   Field,
@@ -36,6 +38,7 @@ import {
   availabilityDueDate,
   fmtDue,
   DAY_LONG,
+  DAY_SHORT,
   dateAtMinutes,
   dateForWeekday,
   fmtDayDate,
@@ -289,9 +292,27 @@ export default function MyShiftsScreen() {
                   style={past ? { opacity: 0.5 } : undefined}
                 >
                   <View
-                    className="h-10 w-1.5 rounded-full"
-                    style={{ backgroundColor: colors.ink, opacity: 0.55 }}
-                  />
+                    className="h-12 w-12 items-center justify-center rounded-xl"
+                    style={{
+                      backgroundColor: colors.bg,
+                      borderWidth: 1,
+                      borderColor: colors.line,
+                      borderCurve: 'continuous',
+                    }}
+                  >
+                    <Text
+                      className="text-[10px] font-bold uppercase"
+                      style={{ color: colors.ink, letterSpacing: 0.4 }}
+                    >
+                      {DAY_SHORT[a.weekday]}
+                    </Text>
+                    <Text
+                      className="text-lg font-bold leading-[20px]"
+                      style={{ color: colors.ink, fontVariant: ['tabular-nums'] }}
+                    >
+                      {dateForWeekday(weekStart, a.weekday).getDate()}
+                    </Text>
+                  </View>
                   <View className="flex-1">
                     <Text className="text-[15px] font-semibold text-foreground">
                       {DAY_LONG[a.weekday]}
@@ -336,7 +357,16 @@ export default function MyShiftsScreen() {
 
   return (
     <Screen onRefresh={load}>
-      <AppBar title="My shifts" subtitle={cafeName ?? ''} />
+      <AppBar
+        eyebrow={(() => {
+          const h = new Date().getHours();
+          const hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+          const first = employee?.name?.split(' ')[0];
+          return first ? `${hi}, ${first}` : hi;
+        })()}
+        title="My shifts"
+        subtitle={cafeName ?? ''}
+      />
 
       {needsAvailability ? (
         <PressScale
@@ -369,14 +399,30 @@ export default function MyShiftsScreen() {
         <PressScale
           scale={0.99}
           onPress={() => setConfirm(upNext)}
-          className="mb-4 rounded-3xl bg-primary p-5"
+          className="mb-4 overflow-hidden rounded-3xl bg-primary p-5"
           style={[
             { borderCurve: 'continuous' },
             { boxShadow: '0 14px 30px -16px rgba(20, 56, 44, 0.55)' },
           ]}
         >
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              right: -50,
+              top: -70,
+              width: 200,
+              height: 200,
+              borderRadius: 100,
+              backgroundColor: C.pistachio,
+              opacity: 0.12,
+            }}
+          />
           <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-semibold text-primary-foreground/70">
+            <Text
+              className="text-[11px] font-semibold uppercase"
+              style={{ color: C.pistachio, letterSpacing: 0.8 }}
+            >
               Your next shift
             </Text>
             <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: C.pistachio }}>
@@ -398,14 +444,19 @@ export default function MyShiftsScreen() {
           >
             {fmtRange(upNext.start_min, upNext.end_min)}
           </Text>
-          <Text className="mt-2 text-sm text-primary-foreground/80">
-            {SLOT_LABEL[upNext.slot]}
-            {workingWith(upNext).length > 0
-              ? `, with ${workingWith(upNext).join(' and ')}`
-              : upNext.slot === 'solo'
-                ? ', on your own'
-                : ''}
-          </Text>
+          <View className="mt-3 flex-row items-center gap-2.5">
+            {workingWith(upNext).length > 0 ? (
+              <AvatarStack names={workingWith(upNext)} size={26} ring={C.pine} max={4} />
+            ) : null}
+            <Text className="flex-1 text-sm text-primary-foreground/80">
+              {SLOT_LABEL[upNext.slot]}
+              {workingWith(upNext).length > 0
+                ? `, with ${workingWith(upNext).join(' and ')}`
+                : upNext.slot === 'solo'
+                  ? ', on your own'
+                  : ''}
+            </Text>
+          </View>
           {covers.some((c) => upNext.ids.includes(c.assignment_id)) ? (
             <View
               className="mt-3 self-start rounded-full px-2.5 py-1"

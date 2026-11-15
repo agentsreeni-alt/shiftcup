@@ -1,11 +1,23 @@
-import { useRouter } from 'expo-router';
-import { Check, Minus, Plus, Send, Share2, Sparkles, UserPlus } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  Plus,
+  Send,
+  Share2,
+  Sparkles,
+  UserPlus,
+} from 'lucide-react-native';
 import { type ElementRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '@/client/supabase';
 import {
   AppBar,
+  Appear,
+  Avatar,
   Btn,
   Card,
   Pill,
@@ -14,6 +26,7 @@ import {
   SectionTitle,
   Segmented,
   Sheet,
+  Skeleton,
   Stars,
   TimeField,
   toast,
@@ -22,6 +35,7 @@ import {
   addEmployee,
   clearAvailabilityDay,
   planningWeekStart,
+  weekStartFromOffset,
   deactivateEmployee,
   markAnswered,
   nudgeEmployee,
@@ -32,6 +46,7 @@ import {
 import { useApp } from '@/lib/app-context';
 import { inviteMessage, isReachable, shareInvite } from '@/lib/invite';
 import { C } from '@/lib/colors';
+import { cardShadow } from '@/lib/motion';
 import { DAY_LONG, DAY_SHORT, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
 import type { Availability, CafeSettings, Employee, UsualDay } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
@@ -69,7 +84,16 @@ type Parsed = {
 export default function TeamScreen() {
   const router = useRouter();
   const { cafe, cafeName, hasAccess } = useApp();
-  const weekStart = planningWeekStart();
+  // Which week the availability below is for: next week by default. A one-week change
+  // (holiday, appointment) can be made for any week ahead without touching the usual week.
+  const params = useLocalSearchParams<{ week?: string }>();
+  const [weekOffset, setWeekOffset] = useState(1);
+  // Opened from Schedule with a week: show that week's availability.
+  useEffect(() => {
+    const w = Number(params.week);
+    if (Number.isInteger(w) && w >= 0 && w <= 12) setWeekOffset(w);
+  }, [params.week]);
+  const weekStart = weekOffset === 1 ? planningWeekStart() : weekStartFromOffset(weekOffset);
   const data = useWeekData(weekStart);
   const settings = data.settings ?? FALLBACK_SETTINGS;
 
@@ -335,203 +359,279 @@ export default function TeamScreen() {
 
   return (
     <Screen onRefresh={data.reload}>
-      <AppBar title="Team" subtitle={`${data.employees.filter((e) => e.active).length} active`} />
+      <AppBar
+        title="Team"
+        subtitle={(() => {
+          const active = data.employees.filter((e) => e.active);
+          const joined = active.filter((e) => e.user_id).length;
+          return `${active.length} active · ${joined} joined the app`;
+        })()}
+        right={
+          <PressScale
+            onPress={() => setMemberSheet({ open: true, editing: null })}
+            accessibilityLabel="Add a team member"
+            className="mt-1 flex-row items-center gap-1.5 rounded-full bg-primary px-3.5 py-2"
+            style={{ boxShadow: '0 8px 20px -10px rgba(20, 56, 44, 0.6)' }}
+          >
+            <UserPlus size={15} color={C.cream} />
+            <Text className="text-sm font-semibold text-primary-foreground">Add</Text>
+          </PressScale>
+        }
+      />
 
-      <View className="mb-4">
-        <Btn
-          label="Add a team member"
-          variant="secondary"
-          icon={<UserPlus size={16} color={C.pine} />}
-          onPress={() => setMemberSheet({ open: true, editing: null })}
-        />
+      <View
+        className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card px-2 py-2"
+        style={[{ borderCurve: 'continuous' }, cardShadow]}
+      >
+        <PressScale
+          onPress={() => setWeekOffset((o) => Math.max(0, o - 1))}
+          disabled={weekOffset === 0}
+          accessibilityLabel="Previous week"
+          className={`h-10 w-10 items-center justify-center rounded-full bg-muted ${
+            weekOffset === 0 ? 'opacity-30' : ''
+          }`}
+        >
+          <ChevronLeft size={20} color={C.pine} />
+        </PressScale>
+        <View className="flex-1 items-center px-2">
+          <Text
+            className="text-[11px] font-semibold uppercase text-muted-foreground"
+            style={{ letterSpacing: 0.6 }}
+          >
+            Availability for
+          </Text>
+          <Text className="text-sm font-semibold text-foreground">
+            {weekOffset === 0 ? 'This week · ' : weekOffset === 1 ? 'Next week · ' : ''}
+            {fmtWeekLabel(weekStart)}
+          </Text>
+        </View>
+        <PressScale
+          onPress={() => setWeekOffset((o) => Math.min(12, o + 1))}
+          accessibilityLabel="Next week"
+          className="h-10 w-10 items-center justify-center rounded-full bg-muted"
+        >
+          <ChevronRight size={20} color={C.pine} />
+        </PressScale>
       </View>
+      <Text className="mb-3 px-1 text-xs text-muted-foreground">
+        Each person’s usual week repeats every week. Tap a day to change it for every week, or only
+        for {fmtWeekLabel(weekStart)}.
+      </Text>
+
       <View className="gap-3">
-        {data.employees.map((emp) => {
+        {data.loading && data.employees.length === 0 ? (
+          <>
+            <Skeleton height={190} />
+            <Skeleton height={190} />
+          </>
+        ) : null}
+        {data.employees.map((emp, index) => {
           const days = availabilityByEmployee.get(emp.id) ?? [];
           const status = data.engine.statuses[emp.id] ?? 'waiting';
+          const hasUsual = Array.isArray(emp.usual_week);
+          const replied = days.some((d) => !d.from_usual);
+          const chip: { label: string; bg: string; ink: string } = !emp.active
+            ? { label: 'Inactive', bg: C.redSoft, ink: C.red }
+            : data.request && status === 'unavailable'
+              ? { label: 'Not available', bg: '#FBF3E2', ink: '#8A5A12' }
+              : data.request && replied
+                ? { label: 'Answered', bg: C.solo, ink: C.soloInk }
+                : hasUsual
+                  ? { label: 'Usual week', bg: C.solo, ink: C.soloInk }
+                  : data.request
+                    ? { label: 'Waiting', bg: '#FBF3E2', ink: '#8A5A12' }
+                    : { label: 'No usual week', bg: C.redSoft, ink: C.red };
           return (
-            <Card key={emp.id}>
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-base font-semibold text-foreground">{emp.name}</Text>
-                    {!emp.active ? (
-                      <Text className="text-[10px] font-bold uppercase text-destructive">
-                        Inactive
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Text className="mt-0.5 text-xs text-muted-foreground">
-                    {(() => {
-                      const hasUsual = Array.isArray(emp.usual_week);
-                      const replied = days.some((d) => !d.from_usual);
-                      if (data.request && status === 'unavailable') return 'Said not available';
-                      if (data.request && replied) return 'Answered';
-                      if (hasUsual) return 'Usual week';
-                      if (data.request) return 'Waiting';
-                      return 'No usual week yet';
-                    })()}
-                    {' · '}
-                    {emp.max_hours}h max · ${Number(emp.hourly_wage).toFixed(2)}
-                    /h
-                  </Text>
-                </View>
-                <View className="flex-row items-center gap-1">
-                  <PressScale
-                    accessibilityLabel={`Lower ${emp.name}'s rating`}
-                    onPress={() => bumpRating(emp, -1)}
-                    className="h-7 w-7 items-center justify-center rounded-full border border-border"
-                  >
-                    <Minus size={12} color={C.pine} />
-                  </PressScale>
-                  <Stars value={emp.rating} />
-                  <PressScale
-                    accessibilityLabel={`Raise ${emp.name}'s rating`}
-                    onPress={() => bumpRating(emp, 1)}
-                    className="h-7 w-7 items-center justify-center rounded-full border border-border"
-                  >
-                    <Plus size={12} color={C.pine} />
-                  </PressScale>
-                </View>
-              </View>
-
-              <View className="mt-2 flex-row flex-wrap gap-1.5">
-                {ROLES.map((r) => {
-                  const on = emp.roles.includes(r.key);
-                  return (
-                    <PressScale
-                      key={r.key}
-                      onPress={() => toggleRole(emp, r.key)}
-                      className={`rounded-full px-2.5 py-1 ${
-                        on ? 'border border-primary bg-primary' : 'border border-border bg-card'
-                      }`}
+            <Appear key={emp.id} index={index}>
+              <Card>
+                <View className="flex-row items-center justify-between gap-3">
+                  <Avatar name={emp.name} size={44} />
+                  <View className="flex-1">
+                    <Text
+                      className="text-base font-semibold text-foreground"
+                      style={{ letterSpacing: -0.2 }}
+                      numberOfLines={1}
                     >
-                      <Text
-                        className={`text-[11px] font-semibold ${
-                          on ? 'text-primary-foreground' : 'text-muted-foreground'
+                      {emp.name}
+                    </Text>
+                    <View className="mt-1 flex-row flex-wrap items-center gap-1.5">
+                      <View
+                        className="rounded-full px-2 py-0.5"
+                        style={{ backgroundColor: chip.bg }}
+                      >
+                        <Text className="text-[11px] font-semibold" style={{ color: chip.ink }}>
+                          {chip.label}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="mt-1 text-xs text-muted-foreground">
+                      {emp.max_hours}h max · ${Number(emp.hourly_wage).toFixed(2)}/h
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center gap-1">
+                    <PressScale
+                      accessibilityLabel={`Lower ${emp.name}'s rating`}
+                      onPress={() => bumpRating(emp, -1)}
+                      className="h-7 w-7 items-center justify-center rounded-full border border-border"
+                    >
+                      <Minus size={12} color={C.pine} />
+                    </PressScale>
+                    <Stars value={emp.rating} />
+                    <PressScale
+                      accessibilityLabel={`Raise ${emp.name}'s rating`}
+                      onPress={() => bumpRating(emp, 1)}
+                      className="h-7 w-7 items-center justify-center rounded-full border border-border"
+                    >
+                      <Plus size={12} color={C.pine} />
+                    </PressScale>
+                  </View>
+                </View>
+
+                <View className="mt-2 flex-row flex-wrap gap-1.5">
+                  {ROLES.map((r) => {
+                    const on = emp.roles.includes(r.key);
+                    return (
+                      <PressScale
+                        key={r.key}
+                        onPress={() => toggleRole(emp, r.key)}
+                        className={`rounded-full px-2.5 py-1 ${
+                          on ? 'border border-primary bg-primary' : 'border border-border bg-card'
                         }`}
                       >
-                        {r.label}
-                      </Text>
-                    </PressScale>
-                  );
-                })}
-                <PressScale
-                  onPress={() => toggleSolo(emp)}
-                  className={`rounded-full px-2.5 py-1 ${
-                    emp.can_work_alone ? 'bg-accent' : 'border border-border bg-card'
-                  }`}
-                >
-                  <Text
-                    className={`text-[11px] font-semibold ${
-                      emp.can_work_alone ? 'text-accent-foreground' : 'text-muted-foreground'
+                        <Text
+                          className={`text-[11px] font-semibold ${
+                            on ? 'text-primary-foreground' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {r.label}
+                        </Text>
+                      </PressScale>
+                    );
+                  })}
+                  <PressScale
+                    onPress={() => toggleSolo(emp)}
+                    className={`rounded-full px-2.5 py-1 ${
+                      emp.can_work_alone ? 'bg-accent' : 'border border-border bg-card'
                     }`}
                   >
-                    Can work alone
-                  </Text>
-                </PressScale>
-              </View>
-
-              {emp.active && !emp.user_id ? (
-                <View className="mt-3 flex-row items-center gap-3 rounded-xl bg-muted px-3 py-2.5">
-                  <View className="flex-1">
-                    <Text className="text-xs font-semibold text-foreground">Not joined yet</Text>
-                    <Text selectable className="text-[11px] text-muted-foreground">
-                      Invite code{' '}
-                      <Text className="font-bold tracking-widest text-foreground">
-                        {emp.invite_code}
-                      </Text>
-                    </Text>
-                  </View>
-                  <PressScale
-                    onPress={() => invite(emp)}
-                    accessibilityLabel={`Share ${emp.name}'s invite`}
-                    className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
-                  >
-                    <Share2 size={13} color={C.cream} />
-                    <Text className="text-xs font-semibold text-primary-foreground">
-                      Share invite
+                    <Text
+                      className={`text-[11px] font-semibold ${
+                        emp.can_work_alone ? 'text-accent-foreground' : 'text-muted-foreground'
+                      }`}
+                    >
+                      Can work alone
                     </Text>
                   </PressScale>
                 </View>
-              ) : null}
 
-              <View className="mt-3 flex-row gap-1">
-                {DAY_SHORT.map((d, i) => {
-                  const row = days.find((x) => x.weekday === i);
-                  const label =
-                    !row || row.kind === 'none'
-                      ? '—'
-                      : row.kind === 'any'
-                        ? 'Any'
-                        : `${fmtTime(row.start_min ?? 0)
-                            .replace(':00', '')
-                            .replace(' ', '')}`;
-                  const tone =
-                    !row || row.kind === 'none'
-                      ? 'bg-muted'
-                      : row.kind === 'any'
-                        ? 'bg-accent'
-                        : 'bg-secondary';
-                  return (
-                    <PressScale
-                      key={d}
-                      onPress={() => setDaySheet({ employee: emp, weekday: i })}
-                      accessibilityLabel={`${emp.name}, ${DAY_LONG[i]}: ${
-                        !row || row.kind === 'none'
-                          ? 'not available'
-                          : row.kind === 'any'
-                            ? 'any time'
-                            : fmtRange(row.start_min ?? 0, row.end_min ?? 0)
-                      }. Change`}
-                      className={`flex-1 items-center rounded-lg py-1.5 ${tone}`}
-                    >
-                      <Text className="text-[9px] font-bold uppercase text-muted-foreground">
-                        {d}
+                {emp.active && !emp.user_id ? (
+                  <View className="mt-3 flex-row items-center gap-3 rounded-xl bg-muted px-3 py-2.5">
+                    <View className="flex-1">
+                      <Text className="text-xs font-semibold text-foreground">Not joined yet</Text>
+                      <Text selectable className="text-[11px] text-muted-foreground">
+                        Invite code{' '}
+                        <Text className="font-bold tracking-widest text-foreground">
+                          {emp.invite_code}
+                        </Text>
                       </Text>
-                      <Text className="text-[10px] font-semibold text-foreground">{label}</Text>
+                    </View>
+                    <PressScale
+                      onPress={() => invite(emp)}
+                      accessibilityLabel={`Share ${emp.name}'s invite`}
+                      className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
+                    >
+                      <Share2 size={13} color={C.cream} />
+                      <Text className="text-xs font-semibold text-primary-foreground">
+                        Share invite
+                      </Text>
                     </PressScale>
-                  );
-                })}
-              </View>
-              <Text className="mt-1.5 text-[11px] text-muted-foreground">
-                {Array.isArray(emp.usual_week)
-                  ? days.some((d) => !d.from_usual)
-                    ? `Usual week, with changes for ${fmtWeekLabel(weekStart)}. Tap a day to edit.`
-                    : 'Usual week. Tap a day to edit.'
-                  : 'Tap a day to set when they can usually work.'}
-              </Text>
+                  </View>
+                ) : null}
 
-              <View className="mt-3 flex-row gap-2">
-                <PressScale
-                  onPress={() => setMemberSheet({ open: true, editing: emp })}
-                  className="flex-1 items-center rounded-lg border border-border py-2"
-                >
-                  <Text className="text-xs font-semibold text-foreground">Edit</Text>
-                </PressScale>
-                {emp.active ? (
+                <View className="mt-3 flex-row gap-1">
+                  {DAY_SHORT.map((d, i) => {
+                    const row = days.find((x) => x.weekday === i);
+                    const label =
+                      !row || row.kind === 'none'
+                        ? '—'
+                        : row.kind === 'any'
+                          ? 'Any'
+                          : `${fmtTime(row.start_min ?? 0)
+                              .replace(':00', '')
+                              .replace(' ', '')}`;
+                    const tone =
+                      !row || row.kind === 'none'
+                        ? 'bg-muted'
+                        : row.kind === 'any'
+                          ? 'bg-accent'
+                          : 'bg-secondary';
+                    return (
+                      <PressScale
+                        key={d}
+                        onPress={() => setDaySheet({ employee: emp, weekday: i })}
+                        accessibilityLabel={`${emp.name}, ${DAY_LONG[i]}: ${
+                          !row || row.kind === 'none'
+                            ? 'not available'
+                            : row.kind === 'any'
+                              ? 'any time'
+                              : fmtRange(row.start_min ?? 0, row.end_min ?? 0)
+                        }. Change`}
+                        className={`flex-1 items-center rounded-lg py-1.5 ${tone}`}
+                      >
+                        <Text className="text-[9px] font-bold uppercase text-muted-foreground">
+                          {d}
+                        </Text>
+                        <Text className="text-[10px] font-semibold text-foreground">{label}</Text>
+                        {row && !row.from_usual && Array.isArray(emp.usual_week) ? (
+                          // Changed for this week only: a small dot, so one-offs stand out.
+                          <View
+                            className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
+                            style={{ backgroundColor: '#B7791F' }}
+                          />
+                        ) : null}
+                      </PressScale>
+                    );
+                  })}
+                </View>
+                <Text className="mt-1.5 text-[11px] text-muted-foreground">
+                  {Array.isArray(emp.usual_week)
+                    ? days.some((d) => !d.from_usual)
+                      ? `Usual week. Days with a dot are changed for ${fmtWeekLabel(weekStart)} only.`
+                      : 'Usual week. Tap a day to edit.'
+                    : 'Tap a day to set when they can usually work.'}
+                </Text>
+
+                <View className="mt-3 flex-row gap-2">
                   <PressScale
-                    onPress={() => setDeactivateTarget(emp)}
-                    hitSlop={8}
-                    className="items-center justify-center px-3 py-2"
+                    onPress={() => setMemberSheet({ open: true, editing: emp })}
+                    className="flex-1 items-center rounded-lg border border-border py-2"
                   >
-                    <Text className="text-xs font-medium text-muted-foreground">Deactivate</Text>
+                    <Text className="text-xs font-semibold text-foreground">Edit</Text>
                   </PressScale>
-                ) : (
-                  <PressScale
-                    onPress={async () => {
-                      await quickUpdate(emp, { active: true });
-                      setMessage(`${emp.name} is back on the team.`);
-                    }}
-                    className="flex-1 items-center rounded-lg bg-primary py-2"
-                  >
-                    <Text className="text-xs font-semibold text-primary-foreground">
-                      Reactivate
-                    </Text>
-                  </PressScale>
-                )}
-              </View>
-            </Card>
+                  {emp.active ? (
+                    <PressScale
+                      onPress={() => setDeactivateTarget(emp)}
+                      hitSlop={8}
+                      className="items-center justify-center px-3 py-2"
+                    >
+                      <Text className="text-xs font-medium text-muted-foreground">Deactivate</Text>
+                    </PressScale>
+                  ) : (
+                    <PressScale
+                      onPress={async () => {
+                        await quickUpdate(emp, { active: true });
+                        setMessage(`${emp.name} is back on the team.`);
+                      }}
+                      className="flex-1 items-center rounded-lg bg-primary py-2"
+                    >
+                      <Text className="text-xs font-semibold text-primary-foreground">
+                        Reactivate
+                      </Text>
+                    </PressScale>
+                  )}
+                </View>
+              </Card>
+            </Appear>
           );
         })}
       </View>

@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import {
   AlertTriangle,
+  CalendarClock,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -36,6 +37,7 @@ import {
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { C, SLOT_COLORS } from '@/lib/colors';
+import { cardShadow } from '@/lib/motion';
 import {
   DAY_LONG,
   DAY_SHORT,
@@ -409,17 +411,22 @@ export default function ScheduleScreen() {
     );
   }
 
+  const chipLabel = !hasShifts && !data.published ? 'Not started' : status;
+
   return (
     <Screen onRefresh={data.reload}>
       <AppBar title="Schedule" subtitle={cafe?.name ?? ''} />
 
-      <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card shadow-card px-2 py-2">
+      <View
+        className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card px-2 py-2"
+        style={[{ borderCurve: 'continuous' }, cardShadow]}
+      >
         <Pressable
           onPress={() => setOffset((o) => o - 1)}
           accessibilityRole="button"
           accessibilityLabel="Previous week"
           hitSlop={8}
-          className="p-2 active:opacity-60"
+          className="h-10 w-10 items-center justify-center rounded-full bg-muted active:opacity-60"
         >
           <ChevronLeft size={20} color={C.pine} />
         </Pressable>
@@ -428,19 +435,49 @@ export default function ScheduleScreen() {
             {offset === 0 ? 'This week' : offset === 1 ? 'Next week' : fmtWeekLabel(weekStart)}
             {offset === 0 || offset === 1 ? ` · ${fmtWeekLabel(weekStart)}` : ''}
           </Text>
-          <Text
-            className="text-[11px] font-semibold text-muted-foreground"
-            style={status === 'Published' ? { color: C.soloInk } : undefined}
+          <View
+            className="mt-1 flex-row items-center gap-1 rounded-full px-2 py-0.5"
+            style={{
+              backgroundColor:
+                status === 'Published'
+                  ? C.solo
+                  : chipLabel === 'Not started'
+                    ? C.border
+                    : '#FBF3E2',
+            }}
           >
-            {status}
-          </Text>
+            <View
+              className="h-1.5 w-1.5 rounded-full"
+              style={{
+                backgroundColor:
+                  status === 'Published'
+                    ? C.soloInk
+                    : chipLabel === 'Not started'
+                      ? C.muted
+                      : '#B7791F',
+              }}
+            />
+            <Text
+              className="text-[11px] font-semibold"
+              style={{
+                color:
+                  status === 'Published'
+                    ? C.soloInk
+                    : chipLabel === 'Not started'
+                      ? C.muted
+                      : '#8A5A12',
+              }}
+            >
+              {chipLabel}
+            </Text>
+          </View>
         </View>
         <Pressable
           onPress={() => setOffset((o) => o + 1)}
           accessibilityRole="button"
           accessibilityLabel="Next week"
           hitSlop={8}
-          className="p-2 active:opacity-60"
+          className="h-10 w-10 items-center justify-center rounded-full bg-muted active:opacity-60"
         >
           <ChevronRight size={20} color={C.pine} />
         </Pressable>
@@ -469,7 +506,13 @@ export default function ScheduleScreen() {
                 ? ` ${data.gaps.length} ${data.gaps.length === 1 ? 'slot is' : 'slots are'} still open.`
                 : ''}
             </Text>
-            <Text className="mt-1 text-xs text-muted-foreground">
+            <MiniStats
+              hours={fmtHours(data.totalMinutes)}
+              people={working.length}
+              wages={fmtMoney(Math.round(data.totalWages)).replace(/\.00$/, '')}
+              open={data.gaps.length}
+            />
+            <Text className="mt-3 text-xs text-muted-foreground">
               Change any shift below and you can publish again.
             </Text>
           </>
@@ -504,13 +547,18 @@ export default function ScheduleScreen() {
                   ? 'Ready to publish'
                   : `Draft with ${issueCount} ${issueCount === 1 ? 'thing' : 'things'} to check`}
             </Text>
-            <Text className="mb-3 mt-1 text-sm text-muted-foreground">
+            <Text className="mt-1 text-sm text-muted-foreground">
               {status === 'Changed since published'
                 ? 'Your team still sees the version you published before.'
-                : `${fmtHours(data.totalMinutes)} across ${working.length} ${
-                    working.length === 1 ? 'person' : 'people'
-                  }, ${fmtMoney(data.totalWages)} in wages. Your team sees nothing until you publish.`}
+                : 'Your team sees nothing until you publish.'}
             </Text>
+            <MiniStats
+              hours={fmtHours(data.totalMinutes)}
+              people={working.length}
+              wages={fmtMoney(Math.round(data.totalWages)).replace(/\.00$/, '')}
+              open={data.gaps.length}
+            />
+            <View className="h-3" />
             <Btn
               label={
                 status === 'Changed since published'
@@ -553,7 +601,8 @@ export default function ScheduleScreen() {
         </PressScale>
       ) : null}
 
-      {data.gaps.length > 0 ? (
+      {/* Before a draft every slot is open: that is the next step, not a list of problems. */}
+      {hasShifts && data.gaps.length > 0 ? (
         <View className="mt-4 gap-2">
           <SectionTitle>Gaps</SectionTitle>
           {(showAllGaps ? data.gaps : data.gaps.slice(0, 3)).map((g) => (
@@ -790,6 +839,15 @@ export default function ScheduleScreen() {
 
       <SectionTitle>Week tools</SectionTitle>
       <View className="gap-2">
+        <Btn
+          label={`Change availability for ${fmtWeekLabel(weekStart)}`}
+          variant="ghost"
+          size="sm"
+          icon={<CalendarClock size={14} color={C.pine} />}
+          onPress={() =>
+            router.push({ pathname: '/(app)/(manager)/team', params: { week: String(offset) } })
+          }
+        />
         <View className="flex-row gap-2">
           <View className="flex-1">
             <Btn
@@ -1138,4 +1196,48 @@ function SlotBody({
 function reasonText(reason: string): string {
   const text = reason.replace(/^Cannot: /, '');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Hours, people, wages and open slots for the week, in one compact row. */
+function MiniStats({
+  hours,
+  people,
+  wages,
+  open,
+}: {
+  hours: string;
+  people: number;
+  wages: string;
+  open: number;
+}) {
+  const items = [
+    { label: 'Hours', value: hours, ink: C.pine },
+    { label: people === 1 ? 'Person' : 'People', value: String(people), ink: C.pine },
+    { label: 'Wages', value: wages, ink: C.pine },
+    { label: 'Open', value: String(open), ink: open > 0 ? C.red : C.soloInk },
+  ];
+  return (
+    <View
+      className="mt-3 flex-row rounded-xl bg-muted px-1 py-2.5"
+      style={{ borderCurve: 'continuous' }}
+    >
+      {items.map((it, i) => (
+        <View
+          key={it.label}
+          className={`flex-1 items-center ${i > 0 ? 'border-l border-border' : ''}`}
+        >
+          <Text
+            className="text-base font-bold"
+            style={{ color: it.ink, fontVariant: ['tabular-nums'], letterSpacing: -0.3 }}
+            numberOfLines={1}
+          >
+            {it.value}
+          </Text>
+          <Text className="text-[10px] font-semibold uppercase text-muted-foreground">
+            {it.label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
