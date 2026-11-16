@@ -1,5 +1,6 @@
 import { supabase } from '@/client/supabase';
 import { addDays, fmtWeekLabel, startOfWeek, toISODate } from '@/lib/dates';
+import { inviteLink } from '@/lib/invite';
 import {
   buildPublishedReminders,
   buildRequestReminders,
@@ -174,7 +175,10 @@ export async function loadRequest(
     .select('id, request_id, cafe_id, employee_id, status')
     .eq('request_id', request.id);
   if (statusError) throw statusError;
-  return { request, statuses: Array.isArray(rows) ? (rows as RequestStatus[]) : [] };
+  return {
+    request,
+    statuses: Array.isArray(rows) ? (rows as RequestStatus[]) : [],
+  };
 }
 
 export async function loadAssignments(cafeId: string, weekStart: string): Promise<Assignment[]> {
@@ -213,6 +217,8 @@ export async function loadCoverRequests(cafeId: string): Promise<CoverRequest[]>
     )
     .eq('cafe_id', cafeId)
     .eq('resolved', false)
+    // Weeks that are over cannot be covered any more.
+    .gte('week_start', currentWeekStart())
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -227,6 +233,9 @@ export async function loadReminders(cafeId: string, weekStart: string): Promise<
     )
     .eq('cafe_id', cafeId)
     .eq('week_start', weekStart)
+    // Invites are about joining, and manager alerts are not messages to the team.
+    .neq('kind', 'invite')
+    .eq('to_manager', false)
     .order('send_at', { ascending: true })
     .limit(200);
   if (error) throw error;
@@ -427,7 +436,11 @@ export async function sendWeeklyRequest(params: {
   const { data, error } = await supabase
     .from('weekly_requests')
     .upsert(
-      { cafe_id: params.cafeId, week_start: params.weekStart, sent_at: new Date().toISOString() },
+      {
+        cafe_id: params.cafeId,
+        week_start: params.weekStart,
+        sent_at: new Date().toISOString(),
+      },
       { onConflict: 'cafe_id,week_start' },
     )
     .select('id')
@@ -460,7 +473,12 @@ export async function sendWeeklyRequest(params: {
         : sentAvailability.has(employeeId)
           ? 'answered'
           : 'waiting';
-    return { request_id: requestId, cafe_id: params.cafeId, employee_id: employeeId, status };
+    return {
+      request_id: requestId,
+      cafe_id: params.cafeId,
+      employee_id: employeeId,
+      status,
+    };
   });
   if (rows.length > 0) {
     const { error: statusError } = await supabase
@@ -477,6 +495,9 @@ export async function sendWeeklyRequest(params: {
     dueMin: params.settings.due_min,
     channel: params.settings.channel,
   });
+  // People who have not joined yet cannot answer in the app. Their request carries the
+  // join link, so the email itself gets them in.
+  const notJoined = await loadJoinLinks(params.cafeId);
   if (drafts.length > 0) {
     const { error: reminderError } = await supabase.from('reminders').insert(
       drafts.map((d) => ({
@@ -486,13 +507,61 @@ export async function sendWeeklyRequest(params: {
         weekday: d.weekday,
         kind: d.kind,
         send_at: d.send_at,
-        body: d.body,
+        body: withJoinLink(d.body, notJoined.get(d.employee_id)),
         channel: d.channel,
         state: 'queued' as const,
       })),
     );
     if (reminderError) throw reminderError;
   }
+}
+
+/** Invite codes of the café's people who have not joined yet, by employee id. */
+async function loadJoinLinks(cafeId: string): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, invite_code')
+    .eq('cafe_id', cafeId)
+    .is('user_id', null);
+  if (error) return new Map();
+  return new Map((data ?? []).map((r) => [r.id as string, r.invite_code as string]));
+}
+
+function withJoinLink(body: string, code: string | undefined): string {
+  if (!code) return body;
+  return `${body} You have not joined ShiftCup yet: open ${inviteLink(code)} (invite code ${code}) to send your times.`;
+}
+
+/** A one-off message to one person, sent the way the café sends its reminders. */
+export async function notifyEmployee(params: {
+  cafeId: string;
+  employeeId: string;
+  weekStart: string;
+  weekday: number;
+  body: string;
+  channel: Channel;
+}): Promise<void> {
+  const { error } = await supabase.from('reminders').insert({
+    cafe_id: params.cafeId,
+    employee_id: params.employeeId,
+    week_start: params.weekStart,
+    weekday: params.weekday,
+    kind: 'notice',
+    send_at: new Date().toISOString(),
+    body: params.body,
+    channel: params.channel,
+    state: 'queued',
+  });
+  if (error) throw error;
+}
+
+/** Emails the invite again. False when there is no email address to send it to. */
+export async function resendInvite(employeeId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('resend_invite', {
+    p_employee: employeeId,
+  });
+  if (error) throw error;
+  return Boolean(data);
 }
 
 export async function nudgeEmployee(params: {
@@ -502,6 +571,7 @@ export async function nudgeEmployee(params: {
   body: string;
   channel: Channel;
 }): Promise<void> {
+  const notJoined = await loadJoinLinks(params.cafeId);
   const { error } = await supabase.from('reminders').insert({
     cafe_id: params.cafeId,
     employee_id: params.employeeId,
@@ -509,7 +579,7 @@ export async function nudgeEmployee(params: {
     weekday: 0,
     kind: 'request',
     send_at: new Date().toISOString(),
-    body: params.body,
+    body: withJoinLink(params.body, notJoined.get(params.employeeId)),
     channel: params.channel,
     state: 'queued',
   });
@@ -1127,7 +1197,10 @@ export async function decideAvailabilityRequest(
   }
   const { error } = await supabase
     .from('availability_requests')
-    .update({ status: approve ? 'approved' : 'declined', decided_at: new Date().toISOString() })
+    .update({
+      status: approve ? 'approved' : 'declined',
+      decided_at: new Date().toISOString(),
+    })
     .eq('id', request.id)
     .eq('status', 'pending');
   if (error) throw error;

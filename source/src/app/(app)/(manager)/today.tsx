@@ -67,13 +67,15 @@ export default function TodayScreen() {
   // One entry per person per day: a long shift can span several blocks.
   const coverDays = [
     ...new Map(
-      data.coverRequests
-        .filter((c) => c.week_start === weekStart)
+      // This week's shifts are the urgent ones, so they are listed too, not only next week's.
+      [...data.coverRequests]
+        .sort((a, b) => a.week_start.localeCompare(b.week_start) || a.weekday - b.weekday)
         .map((c) => [
-          `${c.employee_id}:${c.weekday}`,
+          `${c.employee_id}:${c.week_start}:${c.weekday}`,
           {
             name: data.employees.find((e) => e.id === c.employee_id)?.name ?? 'Someone',
             weekday: c.weekday,
+            weekStart: c.week_start,
             note: c.note?.trim() || null,
           },
         ]),
@@ -435,9 +437,7 @@ export default function TodayScreen() {
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-semibold text-foreground">All clear</Text>
-                <Text className="text-xs text-muted-foreground">
-                  Nothing is waiting on you for next week.
-                </Text>
+                <Text className="text-xs text-muted-foreground">Nothing is waiting on you.</Text>
               </View>
             </View>
           ) : null}
@@ -449,10 +449,25 @@ export default function TodayScreen() {
               }
               value={coverDays.length}
               detail={coverDays
-                .map((c) => `${c.name} (${DAY_SHORT[c.weekday]})${c.note ? `: “${c.note}”` : ''}`)
+                .map(
+                  (c) =>
+                    `${c.name} (${DAY_SHORT[c.weekday]}${
+                      c.weekStart === weekStart
+                        ? ''
+                        : c.weekStart < weekStart
+                          ? ', this week'
+                          : `, ${fmtWeekLabel(c.weekStart)}`
+                    })${c.note ? `: “${c.note}”` : ''}`,
+                )
                 .join(', ')}
               people={coverDays.map((c) => c.name)}
-              onPress={() => router.push('/(app)/(manager)/schedule')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/(manager)/schedule',
+                  // Opens on the week of the most urgent request.
+                  params: { week: coverDays[0].weekStart },
+                })
+              }
             />
           ) : null}
           {waiting.length > 0 ? (

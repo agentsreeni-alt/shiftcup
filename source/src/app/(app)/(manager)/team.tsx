@@ -33,6 +33,7 @@ import {
 } from '@/components/kit';
 import {
   addEmployee,
+  resendInvite,
   clearAvailabilityDay,
   planningWeekStart,
   weekStartFromOffset,
@@ -272,7 +273,11 @@ export default function TeamScreen() {
         const usual: UsualDay[] =
           Array.isArray(emp.usual_week) && emp.usual_week.length === 7
             ? [...emp.usual_week]
-            : Array.from({ length: 7 }, () => ({ kind: 'none', start_min: null, end_min: null }));
+            : Array.from({ length: 7 }, () => ({
+                kind: 'none',
+                start_min: null,
+                end_min: null,
+              }));
         for (const w of weekdays) usual[w] = day;
         await updateEmployee(emp.id, { usual_week: usual });
         // Apply it to the week being planned too.
@@ -819,9 +824,18 @@ export default function TeamScreen() {
         open={memberSheet.open}
         editing={memberSheet.editing}
         onClose={() => setMemberSheet({ open: false, editing: null })}
-        onSaved={async () => {
+        onSaved={async (result) => {
           setMemberSheet({ open: false, editing: null });
           await data.reload();
+          const emp = result?.invited;
+          if (!emp) return;
+          if (emp.email?.trim()) {
+            toast(`Invite emailed to ${emp.name}. They join with code ${emp.invite_code}.`);
+          } else {
+            // No email to send it to: open the share sheet so it can go by text instead.
+            // Waits for the sheet to finish closing, or iOS will not show the share sheet.
+            setTimeout(() => void invite(emp), 450);
+          }
         }}
       />
 
@@ -851,9 +865,11 @@ function MemberSheet({
   open: boolean;
   editing: Employee | null;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (result?: { invited?: Employee }) => Promise<void>;
 }) {
   const { cafe } = useApp();
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -880,8 +896,22 @@ function MemberSheet({
     setMaxHours(String(editing?.max_hours ?? 20));
     setWage(String(editing?.hourly_wage ?? 15));
     setError('');
+    setResent('');
   }
   if (!open && loadedFor !== null) setLoadedFor(null);
+
+  const emailAgain = async () => {
+    if (!editing) return;
+    setResending(true);
+    try {
+      const ok = await resendInvite(editing.id);
+      setResent(ok ? `Invite emailed to ${editing.email}.` : 'Add an email address first.');
+    } catch (e) {
+      setResent(e instanceof Error ? e.message : 'Could not send the invite.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const save = async () => {
     if (!cafe) return;
@@ -907,6 +937,7 @@ function MemberSheet({
         maxHours: Math.min(80, Math.max(1, Math.round(Number(maxHours)) || 20)),
         hourlyWage: Math.max(0, Number(wage.replace(',', '.').replace(/[^0-9.]/g, '')) || 0),
       };
+      let invited: Employee | undefined;
       if (editing) {
         await updateEmployee(editing.id, {
           name: payload.name,
@@ -918,10 +949,23 @@ function MemberSheet({
           max_hours: payload.maxHours,
           hourly_wage: payload.hourlyWage,
         });
+        // A new email for someone who has not joined yet sends them the invite.
+        const newEmail = (payload.email ?? '').toLowerCase();
+        if (
+          !editing.user_id &&
+          newEmail &&
+          newEmail !== (editing.email ?? '').trim().toLowerCase()
+        ) {
+          invited = {
+            ...editing,
+            name: payload.name,
+            email: payload.email ?? null,
+          };
+        }
       } else {
-        await addEmployee({ cafeId: cafe.id, ...payload });
+        invited = await addEmployee({ cafeId: cafe.id, ...payload });
       }
-      await onSaved();
+      await onSaved({ invited });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.');
     } finally {
@@ -960,7 +1004,7 @@ function MemberSheet({
           blurOnSubmit={false}
           onSubmitEditing={() => phoneRef.current?.focus()}
           keyboardType="email-address"
-          placeholder="Email (for invites and reminders)"
+          placeholder="Email (their invite to join goes here)"
           placeholderTextColor={C.muted}
           className="rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground"
         />
@@ -1066,8 +1110,24 @@ function MemberSheet({
               {editing.invite_code}
             </Text>
             <Text className="mt-1 text-[11px] text-muted-foreground">
-              Share this with {editing.name}. They join from the welcome screen.
+              {editing.user_id
+                ? `${editing.name} has joined.`
+                : `${editing.name} has not joined yet. They tap "Join with your invite code" in ShiftCup and enter this code.`}
             </Text>
+            {!editing.user_id && editing.email ? (
+              <View className="mt-2 gap-1">
+                <Btn
+                  label="Email the invite again"
+                  variant="secondary"
+                  size="sm"
+                  loading={resending}
+                  onPress={emailAgain}
+                />
+                {resent ? (
+                  <Text className="text-[11px] text-muted-foreground">{resent}</Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         ) : null}
 

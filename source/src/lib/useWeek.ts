@@ -186,10 +186,25 @@ export function useWeekData(weekStart: string): WeekData {
         ),
       },
       requestSent: Boolean(request),
-      coverDays: new Set(coverRequests.map((c) => `${c.employee_id}:${c.weekday}`)),
+      // Only this week's requests: a cover request for one Saturday must not open a gap on
+      // every other Saturday.
+      coverDays: new Set(
+        coverRequests
+          .filter((c) => c.week_start === weekStart)
+          .map((c) => `${c.employee_id}:${c.weekday}`),
+      ),
       maxShiftHours: settings?.max_shift_hours ?? 8,
     }),
-    [employees, effectiveAvailability, assignments, statuses, request, coverRequests, settings],
+    [
+      employees,
+      effectiveAvailability,
+      assignments,
+      statuses,
+      request,
+      coverRequests,
+      settings,
+      weekStart,
+    ],
   );
 
   const engineBlocks = useMemo(

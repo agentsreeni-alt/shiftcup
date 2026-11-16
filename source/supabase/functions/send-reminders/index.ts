@@ -7,7 +7,7 @@ const supabase = createClient(
 
 const FROM = Deno.env.get('REMINDER_FROM_EMAIL') ?? 'ShiftCup <shifts@shiftcup.app>';
 
-type Kind = 'request' | 'published' | 'evening' | 'soon' | 'renewal' | 'notice';
+type Kind = 'request' | 'published' | 'evening' | 'soon' | 'renewal' | 'notice' | 'invite';
 
 type Row = {
   id: string;
@@ -16,8 +16,9 @@ type Row = {
   kind: Kind;
   body: string;
   channel: 'email' | 'text';
+  to_manager: boolean;
   employees: { name: string; email: string | null; phone: string | null } | null;
-  cafes: { name: string; is_sample: boolean } | null;
+  cafes: { name: string; is_sample: boolean; owner_id: string | null } | null;
 };
 
 // 'sent': delivered. 'retry': temporary problem, try again next run.
@@ -45,6 +46,8 @@ function subjectFor(kind: Kind, cafeName: string): string {
       return `${cafeName}: your shift starts soon`;
     case 'notice':
       return `${cafeName}: an update from your manager`;
+    case 'invite':
+      return `You're invited to join ${cafeName} on ShiftCup`;
     default:
       return `${cafeName}: ShiftCup`;
   }
@@ -103,8 +106,24 @@ async function sendSms(to: string, text: string): Promise<Outcome> {
 async function deliver(row: Row, emailReady: boolean, smsReady: boolean): Promise<Outcome> {
   // A sample café is a demo: it never messages anyone.
   if (row.cafes?.is_sample) return 'drop';
-  const employee = row.employees;
   const cafeName = row.cafes?.name ?? 'ShiftCup';
+
+  // A request from the team: it goes to the café's manager, by email.
+  if (row.to_manager) {
+    const ownerId = row.cafes?.owner_id;
+    if (!ownerId) return 'drop';
+    const { data: owner } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', ownerId)
+      .maybeSingle();
+    const to = owner?.email?.trim();
+    if (!to || isReservedAddress(to)) return 'drop';
+    if (!emailReady) return 'retry';
+    return await sendEmail(to, `${cafeName}: a request from your team`, row.body, row.id);
+  }
+
+  const employee = row.employees;
   const email = employee?.email?.trim() || null;
   const phone = employee?.phone?.trim() || null;
 
@@ -114,12 +133,7 @@ async function deliver(row: Row, emailReady: boolean, smsReady: boolean): Promis
     if (outcome === 'sent') return outcome;
   }
   if (email && emailReady && !isReservedAddress(email)) {
-    const emailOutcome = await sendEmail(
-      email,
-      subjectFor(row.kind, cafeName),
-      row.body,
-      row.id,
-    );
+    const emailOutcome = await sendEmail(email, subjectFor(row.kind, cafeName), row.body, row.id);
     if (emailOutcome !== 'drop' || outcome !== 'retry') outcome = emailOutcome;
   }
   return outcome;
@@ -137,20 +151,19 @@ Deno.serve(async (req) => {
   const emailReady = Boolean(Deno.env.get('RESEND_API_KEY'));
   const smsReady = Boolean(
     Deno.env.get('TWILIO_ACCOUNT_SID') &&
-      Deno.env.get('TWILIO_AUTH_TOKEN') &&
-      Deno.env.get('TWILIO_FROM_NUMBER'),
+    Deno.env.get('TWILIO_AUTH_TOKEN') &&
+    Deno.env.get('TWILIO_FROM_NUMBER'),
   );
   if (!emailReady && !smsReady) {
-    return new Response(
-      JSON.stringify({ ok: false, reason: 'no_delivery_provider_configured' }),
-      { headers: { 'Content-Type': 'application/json' } },
-    );
+    return new Response(JSON.stringify({ ok: false, reason: 'no_delivery_provider_configured' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const { data, error } = await supabase
     .from('reminders')
     .select(
-      'id, cafe_id, employee_id, kind, body, channel, employees(name, email, phone), cafes(name, is_sample)',
+      'id, cafe_id, employee_id, kind, body, channel, to_manager, employees(name, email, phone), cafes(name, is_sample, owner_id)',
     )
     .eq('state', 'queued')
     .lte('send_at', new Date().toISOString())

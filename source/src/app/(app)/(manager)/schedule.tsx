@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   AlertTriangle,
   CalendarClock,
@@ -30,6 +30,7 @@ import {
 import {
   loadAssignments,
   publishWeek,
+  notifyEmployee,
   resolveCoverRequest,
   saveAssignments,
   updateEmployee,
@@ -45,6 +46,7 @@ import {
   fmtHours,
   fmtMoney,
   fmtRange,
+  fmtDayDate,
   fmtWeekLabel,
   weekdayOf,
 } from '@/lib/dates';
@@ -77,6 +79,13 @@ export default function ScheduleScreen() {
   const { cafe, hasAccess, isSample } = useApp();
   // Opens on the week being planned (next week). Arrows reach this week and beyond.
   const [offset, setOffset] = useState(1);
+  // Today can open this screen on a given week, e.g. the week of a cover request.
+  const { week: weekParam } = useLocalSearchParams<{ week?: string }>();
+  useEffect(() => {
+    if (typeof weekParam !== 'string') return;
+    const found = [0, 1, 2, 3, 4].find((o) => weekStartFromOffset(o) === weekParam);
+    if (found !== undefined) setOffset(found);
+  }, [weekParam]);
   const weekStart = weekStartFromOffset(offset);
   const data = useWeekData(weekStart);
   const settings = data.settings ?? FALLBACK_SETTINGS;
@@ -338,9 +347,20 @@ export default function ScheduleScreen() {
     setBusy(true);
     try {
       for (const c of sheetCovers) await resolveCoverRequest(c.id);
+      // Tell them, or they will assume they are off. Best effort: the decision stands.
+      if (cafe && sheetAssignment?.employee_id) {
+        await notifyEmployee({
+          cafeId: cafe.id,
+          employeeId: sheetAssignment.employee_id,
+          weekStart,
+          weekday: sheetAssignment.weekday,
+          body: `Your manager could not find cover for ${fmtDayDate(weekStart, sheetAssignment.weekday)}. You are still on that shift. Talk to them if you really cannot make it.`,
+          channel: settings.channel,
+        }).catch(() => {});
+      }
       setSlotSheet(null);
       await data.reload();
-      setMessage(`${sheetCoverName ?? 'They'} stays on the shift. The cover request is closed.`);
+      setMessage(`${sheetCoverName ?? 'They'} stays on the shift and has been told.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Could not close the cover request.');
     } finally {

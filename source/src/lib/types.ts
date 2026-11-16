@@ -5,7 +5,8 @@ export type AvailKind = 'any' | 'none' | 'window';
 export type ReqStatus = 'waiting' | 'answered' | 'unavailable';
 export type SubStatus = 'trial' | 'active' | 'past_due' | 'ended';
 export type Channel = 'email' | 'text';
-export type ReminderKind = 'request' | 'published' | 'evening' | 'soon' | 'renewal' | 'notice';
+export type ReminderKind =
+  'request' | 'published' | 'evening' | 'soon' | 'renewal' | 'notice' | 'invite';
 export type ReminderState = 'queued' | 'sent' | 'cancelled';
 
 export const JOB_ROLES = ['barista', 'scooper', 'back_of_house'] as const;
@@ -63,7 +64,11 @@ export type Employee = {
   usual_week: UsualDay[] | null;
 };
 
-export type UsualDay = { kind: AvailKind; start_min: number | null; end_min: number | null };
+export type UsualDay = {
+  kind: AvailKind;
+  start_min: number | null;
+  end_min: number | null;
+};
 
 /** Employee-safe projection (no wage, no rating, no contact details). */
 export type EmployeeSelf = {

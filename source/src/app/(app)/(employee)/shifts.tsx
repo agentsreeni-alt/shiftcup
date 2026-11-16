@@ -26,6 +26,7 @@ import {
   createCoverRequest,
   currentWeekStart,
   loadMyAssignments,
+  loadMyAvailabilityRequests,
   loadMyCoverRequests,
   loadMyPublishedWeek,
   loadMyTeam,
@@ -73,6 +74,49 @@ function fromSnapshot(pub: PublishedSchedule | null): EngineAssignment[] | null 
     startMin: a.start_min,
     endMin: a.end_min,
   }));
+}
+
+/**
+ * My shifts as published. The live assignments are the manager's working draft, which can
+ * change after publishing; until the manager publishes again, I see what was published.
+ * A live row is matched only to get its id, so I can still ask for cover.
+ */
+function myPublished(
+  pub: PublishedSchedule | null,
+  live: Assignment[],
+  me: string,
+  weekStart: string,
+): Assignment[] {
+  if (!pub || !Array.isArray(pub.snapshot)) return [];
+  const liveIds = new Map(
+    live
+      .filter((a) => a.employee_id === me && a.id)
+      .map((a) => [`${a.block_id}:${a.slot}:${a.start_min}-${a.end_min}`, a.id as string]),
+  );
+  return (
+    pub.snapshot as {
+      weekday: number;
+      block_id: string;
+      slot: Assignment['slot'];
+      employee_id: string | null;
+      start_min: number;
+      end_min: number;
+    }[]
+  )
+    .filter((r) => r.employee_id === me)
+    .map((r) => ({
+      id: liveIds.get(`${r.block_id}:${r.slot}:${r.start_min}-${r.end_min}`),
+      cafe_id: pub.cafe_id,
+      week_start: weekStart,
+      weekday: r.weekday,
+      block_id: r.block_id,
+      slot: r.slot,
+      employee_id: me,
+      start_min: r.start_min,
+      end_min: r.end_min,
+      manual: false,
+      over_limit: false,
+    }));
 }
 
 /** Back-to-back blocks on the same day and role, shown as one shift. */
@@ -150,6 +194,7 @@ export default function MyShiftsScreen() {
   const [coverNote, setCoverNote] = useState('');
   const [message, setMessage] = useState('');
   const [needsAvailability, setNeedsAvailability] = useState(false);
+  const [usualSent, setUsualSent] = useState(false);
   const [tab, setTab] = useState<'mine' | 'team'>('mine');
   const [team, setTeam] = useState<{ id: string; name: string }[]>([]);
   const [teamThis, setTeamThis] = useState<EngineAssignment[] | null>(null);
@@ -158,28 +203,35 @@ export default function MyShiftsScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [a, b, c, s, req] = await Promise.all([
-        loadMyAssignments(currentWeekStart()),
-        loadMyAssignments(weekStartFromOffset(1)),
+      const thisStart = currentWeekStart();
+      const nextStart = weekStartFromOffset(1);
+      const [a, b, pubThis, pubNext, c, s, req] = await Promise.all([
+        loadMyAssignments(thisStart),
+        loadMyAssignments(nextStart),
+        loadMyPublishedWeek(thisStart),
+        loadMyPublishedWeek(nextStart),
         loadMyCoverRequests(),
         loadMySettings(),
         loadMyRequestStatus(planningWeekStart()),
       ]);
       setNeedsAvailability(Boolean(req.request) && req.status?.status === 'waiting');
-      setThisWeek(a);
-      setNextWeek(b);
+      const me = employee?.id ?? '';
+      setThisWeek(myPublished(pubThis, a, me, thisStart));
+      setNextWeek(myPublished(pubNext, b, me, nextStart));
       setCovers(c);
       setSettings(s);
-      // The team view is a bonus: if it fails, My shifts still works.
+      setTeamThis(fromSnapshot(pubThis));
+      setTeamNext(fromSnapshot(pubNext));
+      // Has a first usual week already gone to the manager? Then there is nothing to ask for.
       try {
-        const [people, pubThis, pubNext] = await Promise.all([
-          loadMyTeam(),
-          loadMyPublishedWeek(currentWeekStart()),
-          loadMyPublishedWeek(weekStartFromOffset(1)),
-        ]);
-        setTeam(people);
-        setTeamThis(fromSnapshot(pubThis));
-        setTeamNext(fromSnapshot(pubNext));
+        const asks = await loadMyAvailabilityRequests();
+        setUsualSent(asks.some((r) => r.scope === 'usual' && r.status === 'pending'));
+      } catch {
+        setUsualSent(false);
+      }
+      // The team names are a bonus: if they fail, My shifts still works.
+      try {
+        setTeam(await loadMyTeam());
       } catch {
         setTeam([]);
       }
@@ -191,7 +243,7 @@ export default function MyShiftsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [employee?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -201,6 +253,12 @@ export default function MyShiftsScreen() {
 
   const askCover = async () => {
     if (!confirm || !employee) return;
+    if (confirm.ids.length === 0) {
+      // The manager has moved this shift in their draft since publishing.
+      setMessage('Your manager is changing this shift. Check again after they publish.');
+      setConfirm(null);
+      return;
+    }
     setBusy(true);
     try {
       const already = new Set(covers.map((c) => c.assignment_id));
@@ -308,7 +366,10 @@ export default function MyShiftsScreen() {
                     </Text>
                     <Text
                       className="text-lg font-bold leading-[20px]"
-                      style={{ color: colors.ink, fontVariant: ['tabular-nums'] }}
+                      style={{
+                        color: colors.ink,
+                        fontVariant: ['tabular-nums'],
+                      }}
                     >
                       {dateForWeekday(weekStart, a.weekday).getDate()}
                     </Text>
@@ -387,6 +448,29 @@ export default function MyShiftsScreen() {
                   settings?.due_min ?? 1200,
                 ),
               )}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={C.cream} />
+        </PressScale>
+      ) : null}
+
+      {/* New on the team: the manager cannot schedule them until they say when they can work. */}
+      {!loading && employee && !Array.isArray(employee.usual_week) && !needsAvailability ? (
+        <PressScale
+          onPress={() => router.push('/(app)/(employee)/availability')}
+          className="mb-3 flex-row items-center gap-3 rounded-2xl bg-primary px-4 py-3.5"
+        >
+          <Clock size={18} color={C.cream} />
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-primary-foreground">
+              {usualSent
+                ? 'Your usual week is with your manager'
+                : 'Tell your manager when you can work'}
+            </Text>
+            <Text className="text-xs text-primary-foreground/80">
+              {usualSent
+                ? 'You will get shifts once they approve it.'
+                : 'Set your usual week once. Your shifts are planned from it every week.'}
             </Text>
           </View>
           <ChevronRight size={16} color={C.cream} />
