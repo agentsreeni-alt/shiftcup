@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 import { ChangeRequests } from '@/components/ChangeRequests';
+import { SetupCard, SetupSheet } from '@/components/TeamSetup';
 import {
   AppBar,
   Appear,
@@ -30,6 +31,7 @@ import {
 import { planningWeekStart, publishWeek, saveAssignments, sendWeeklyRequest } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
 import { isReachable } from '@/lib/invite';
+import { teamSetup } from '@/lib/readiness';
 import { C } from '@/lib/colors';
 import { cardShadow } from '@/lib/motion';
 import { DAY_SHORT, fmtHours, fmtMoney, fmtWeekLabel } from '@/lib/dates';
@@ -38,7 +40,7 @@ import type { Assignment, CafeSettings } from '@/lib/types';
 import { useWeekData } from '@/lib/useWeek';
 import { changedSincePublish as changedSincePublish_ } from '@/lib/utils';
 
-const STEPS = ['Availability', 'Draft', 'Fix gaps', 'Publish'];
+const STEPS = ['Team ready', 'Draft', 'Fix gaps', 'Publish'];
 
 const FALLBACK_SETTINGS: CafeSettings = {
   cafe_id: '',
@@ -58,6 +60,7 @@ export default function TodayScreen() {
   const data = useWeekData(weekStart);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const settings = data.settings ?? FALLBACK_SETTINGS;
   const activeEmployees = data.employees.filter((e) => e.active);
@@ -83,9 +86,13 @@ export default function TodayScreen() {
   ];
   // Before a draft exists every slot is open; that is the next step, not a problem.
   const openSlots = data.assignments.some((a) => a.employee_id) ? data.gaps.length : 0;
-  const attentionCount = coverDays.length + waiting.length + openSlots + data.clashes.length;
-  const filledCount = data.assignments.filter((a) => a.employee_id).length;
   const hasRequest = Boolean(data.request);
+  // Who can be scheduled, and who still has to join or send a usual week.
+  const setup = teamSetup(data.employees, data.changeRequests, data.invitedIds);
+  const teamReady = setup.notReady.length === 0;
+  const attentionCount =
+    coverDays.length + (hasRequest ? waiting.length : 0) + openSlots + data.clashes.length;
+  const filledCount = data.assignments.filter((a) => a.employee_id).length;
   // People with a usual week can be scheduled without asking them first.
   const noUsual = activeEmployees.filter((e) => !Array.isArray(e.usual_week));
   const anyUsual = noUsual.length < activeEmployees.length;
@@ -96,7 +103,9 @@ export default function TodayScreen() {
     Boolean(data.published) && changedSincePublish_(data.published?.snapshot, data.assignments);
 
   let step = 0;
-  if (hasRequest || anyUsual) step = 1;
+  // The draft comes after the team: until everyone has a usual week (or has answered a
+  // request for this week), the next job is getting them ready, not drafting.
+  if (activeEmployees.length > 0 && (teamReady || (hasRequest && waiting.length === 0))) step = 1;
   if (hasDraft) step = 2;
   if (hasDraft && issueCount === 0) step = 3;
   // A published week stays published, even if the manager accepted some gaps.
@@ -202,7 +211,10 @@ export default function TodayScreen() {
       router.push('/(app)/billing');
       return;
     }
-    if (step === 0) return router.push('/(app)/(manager)/team');
+    if (step === 0) {
+      if (activeEmployees.length === 0) return router.push('/(app)/(manager)/team');
+      return setSetupOpen(true);
+    }
     if (step === 1) return runDraft();
     if (step === 2) return router.push('/(app)/(manager)/schedule');
     if (step === 3) return runPublish();
@@ -212,7 +224,9 @@ export default function TodayScreen() {
   const nextLabel = !hasAccess
     ? 'Subscribe to keep scheduling'
     : step === 0
-      ? 'Set usual weeks in Team'
+      ? activeEmployees.length === 0
+        ? 'Add your team'
+        : `Invite and remind ${setup.todo.length === 1 ? '1 person' : `${setup.todo.length} people`}`
       : step === 1
         ? 'Build the draft'
         : step === 2
@@ -245,7 +259,9 @@ export default function TodayScreen() {
   const readyCount = activeEmployees.length - waiting.length;
   const headline =
     step === 0
-      ? 'Set up how your week runs'
+      ? activeEmployees.length === 0
+        ? 'Add your team'
+        : 'Get your team ready'
       : step === 1
         ? 'Ready to draft'
         : step === 2
@@ -351,7 +367,9 @@ export default function TodayScreen() {
 
           <Text className="mb-4 text-sm leading-5" style={{ color: 'rgba(242,245,236,0.78)' }}>
             {step === 0
-              ? 'Set when each person can usually work, and ShiftCup drafts every week from that. Or ask your team for next week.'
+              ? activeEmployees.length === 0
+                ? 'Add the people who work here. Each one gets an invite to join and send when they can work.'
+                : `${setup.ready} of ${setup.total} can be scheduled. Everyone joins with their invite and sends when they can usually work. You approve it once, then every week is drafted from it.`
               : step === 1 && !hasRequest
                 ? noUsual.length === 0
                   ? 'Drafts use everyone’s usual week. Build it, adjust, then publish to send everyone their shifts.'
@@ -382,7 +400,18 @@ export default function TodayScreen() {
             onPress={nextAction}
             icon={busy ? undefined : <ArrowRight size={18} color={C.pine} />}
           />
-          {hasAccess && !hasRequest && step <= 1 ? (
+          {hasAccess && step === 0 && anyUsual ? (
+            <PressScale
+              onPress={runDraft}
+              disabled={busy}
+              className="mt-2 flex-row items-center justify-center gap-2 rounded-xl py-3"
+            >
+              <Text className="text-sm font-semibold" style={{ color: C.cream }}>
+                Or draft now with the {setup.ready} who {setup.ready === 1 ? 'is' : 'are'} ready
+              </Text>
+            </PressScale>
+          ) : null}
+          {hasAccess && !hasRequest && step === 1 ? (
             <PressScale
               onPress={runSendRequest}
               disabled={busy}
@@ -417,6 +446,18 @@ export default function TodayScreen() {
               await data.reload();
               toast(text);
             }}
+          />
+        </Appear>
+      ) : null}
+
+      {setup.todo.length > 0 && cafe ? (
+        <Appear index={1}>
+          <SectionTitle>Team setup</SectionTitle>
+          <SetupCard
+            people={setup.people}
+            ready={setup.ready}
+            total={setup.total}
+            onOpen={step === 0 ? undefined : () => setSetupOpen(true)}
           />
         </Appear>
       ) : null}
@@ -470,18 +511,14 @@ export default function TodayScreen() {
               }
             />
           ) : null}
-          {waiting.length > 0 ? (
+          {hasRequest && waiting.length > 0 ? (
             <AttentionRow
               icon={<Users size={17} color={C.red} />}
-              title={hasRequest ? 'Have not answered yet' : 'No usual week yet'}
+              title="Have not answered yet"
               value={waiting.length}
-              detail={
-                hasRequest
-                  ? `${readyCount} of ${activeEmployees.length} ready · ${waiting
-                      .map((e) => e.name)
-                      .join(', ')}`
-                  : `Set one for ${waiting.map((e) => e.name).join(', ')} in Team.`
-              }
+              detail={`${readyCount} of ${activeEmployees.length} ready · ${waiting
+                .map((e) => e.name)
+                .join(', ')}`}
               people={waiting.map((e) => e.name)}
               progress={
                 activeEmployees.length > 0 ? readyCount / activeEmployees.length : undefined
@@ -545,6 +582,18 @@ export default function TodayScreen() {
       </Appear>
 
       {data.error ? <Text className="mt-4 text-sm text-destructive">{data.error}</Text> : null}
+      {cafe ? (
+        <SetupSheet
+          visible={setupOpen}
+          onClose={() => setSetupOpen(false)}
+          people={setup.todo}
+          cafeId={cafe.id}
+          cafeName={cafeName}
+          channel={settings.channel}
+          onChanged={data.reload}
+          onReview={() => setSetupOpen(false)}
+        />
+      ) : null}
     </Screen>
   );
 }

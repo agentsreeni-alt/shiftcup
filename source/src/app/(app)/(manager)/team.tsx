@@ -33,6 +33,7 @@ import {
 } from '@/components/kit';
 import {
   addEmployee,
+  askForUsualWeek,
   resendInvite,
   clearAvailabilityDay,
   planningWeekStart,
@@ -50,7 +51,9 @@ import { C } from '@/lib/colors';
 import { cardShadow } from '@/lib/motion';
 import { DAY_LONG, DAY_SHORT, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
 import type { Availability, CafeSettings, Employee, UsualDay } from '@/lib/types';
+import { STAGE_LABEL, STAGE_TONE_OF, teamSetup } from '@/lib/readiness';
 import { useWeekData } from '@/lib/useWeek';
+import { SetupCard, SetupSheet } from '@/components/TeamSetup';
 
 const ROLES: { key: string; label: string }[] = [
   { key: 'barista', label: 'Barista' },
@@ -97,6 +100,9 @@ export default function TeamScreen() {
   const weekStart = weekOffset === 1 ? planningWeekStart() : weekStartFromOffset(weekOffset);
   const data = useWeekData(weekStart);
   const settings = data.settings ?? FALLBACK_SETTINGS;
+  const setup = teamSetup(data.employees, data.changeRequests, data.invitedIds);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [asked, setAsked] = useState<Set<string>>(new Set());
 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -384,6 +390,17 @@ export default function TeamScreen() {
         }
       />
 
+      {setup.todo.length > 0 && cafe ? (
+        <View className="mb-4">
+          <SetupCard
+            people={setup.people}
+            ready={setup.ready}
+            total={setup.total}
+            onOpen={() => setSetupOpen(true)}
+          />
+        </View>
+      ) : null}
+
       <View
         className="mb-3 flex-row items-center justify-between rounded-2xl border border-border/60 bg-card px-2 py-2"
         style={[{ borderCurve: 'continuous' }, cardShadow]}
@@ -441,11 +458,11 @@ export default function TeamScreen() {
               ? { label: 'Not available', bg: '#FBF3E2', ink: '#8A5A12' }
               : data.request && replied
                 ? { label: 'Answered', bg: C.solo, ink: C.soloInk }
-                : hasUsual
-                  ? { label: 'Usual week', bg: C.solo, ink: C.soloInk }
-                  : data.request
-                    ? { label: 'Waiting', bg: '#FBF3E2', ink: '#8A5A12' }
-                    : { label: 'No usual week', bg: C.redSoft, ink: C.red };
+                : (() => {
+                    // Where they are on the way to being schedulable.
+                    const stage = setup.people.find((p) => p.emp.id === emp.id)?.stage ?? 'ready';
+                    return { label: STAGE_LABEL[stage], ...STAGE_TONE_OF[stage] };
+                  })();
           return (
             <Appear key={emp.id} index={index}>
               <Card>
@@ -532,7 +549,13 @@ export default function TeamScreen() {
                 {emp.active && !emp.user_id ? (
                   <View className="mt-3 flex-row items-center gap-3 rounded-xl bg-muted px-3 py-2.5">
                     <View className="flex-1">
-                      <Text className="text-xs font-semibold text-foreground">Not joined yet</Text>
+                      <Text className="text-xs font-semibold text-foreground">
+                        {data.invitedIds.has(emp.id)
+                          ? `Invite emailed${emp.email ? ` to ${emp.email}` : ''}, not joined yet`
+                          : emp.email
+                            ? 'Not joined yet'
+                            : 'Not invited yet. Share it, or add an email in Edit'}
+                      </Text>
                       <Text selectable className="text-[11px] text-muted-foreground">
                         Invite code{' '}
                         <Text className="font-bold tracking-widest text-foreground">
@@ -550,6 +573,45 @@ export default function TeamScreen() {
                         Share invite
                       </Text>
                     </PressScale>
+                  </View>
+                ) : null}
+
+                {emp.active && emp.user_id && !hasUsual ? (
+                  <View className="mt-3 flex-row items-center gap-3 rounded-xl bg-muted px-3 py-2.5">
+                    <View className="flex-1">
+                      <Text className="text-xs font-semibold text-foreground">
+                        {setup.people.find((p) => p.emp.id === emp.id)?.stage === 'review'
+                          ? 'Sent a usual week. Approve it on Today'
+                          : 'Joined. Has not sent a usual week'}
+                      </Text>
+                      <Text className="text-[11px] text-muted-foreground">
+                        Or tap a day below to set it yourself.
+                      </Text>
+                    </View>
+                    {setup.people.find((p) => p.emp.id === emp.id)?.stage === 'needs_usual' ? (
+                      <PressScale
+                        onPress={async () => {
+                          if (!cafe || asked.has(emp.id)) return;
+                          try {
+                            await askForUsualWeek({
+                              cafeId: cafe.id,
+                              employeeId: emp.id,
+                              channel: settings.channel,
+                            });
+                            setAsked((prev) => new Set(prev).add(emp.id));
+                            toast(`Asked ${emp.name} for their usual week.`);
+                          } catch {
+                            toast('Could not send that. Try again.', 'error');
+                          }
+                        }}
+                        accessibilityLabel={`Ask ${emp.name} for their usual week`}
+                        className="rounded-lg bg-primary px-3 py-2"
+                      >
+                        <Text className="text-xs font-semibold text-primary-foreground">
+                          {asked.has(emp.id) ? 'Asked' : 'Ask them'}
+                        </Text>
+                      </PressScale>
+                    ) : null}
                   </View>
                 ) : null}
 
@@ -819,6 +881,22 @@ export default function TeamScreen() {
           <Btn label="Cancel" variant="ghost" onPress={() => setDeactivateTarget(null)} />
         </View>
       </Sheet>
+
+      {cafe ? (
+        <SetupSheet
+          visible={setupOpen}
+          onClose={() => setSetupOpen(false)}
+          people={setup.todo}
+          cafeId={cafe.id}
+          cafeName={cafeName || cafe.name}
+          channel={settings.channel}
+          onChanged={data.reload}
+          onReview={() => {
+            setSetupOpen(false);
+            router.push('/(app)/(manager)/today');
+          }}
+        />
+      ) : null}
 
       <MemberSheet
         open={memberSheet.open}

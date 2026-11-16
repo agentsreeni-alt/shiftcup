@@ -66,12 +66,16 @@ export function ChangeRequests({
               <View className="flex-1">
                 <Text className="text-[15px] font-semibold text-foreground">
                   {r.scope === 'usual'
-                    ? `${name} wants a new usual week`
+                    ? usual
+                      ? `${name} wants a new usual week`
+                      : `${name} sent their usual week`
                     : `${name} needs a change for one week`}
                 </Text>
                 <Text className="mt-0.5 text-xs text-muted-foreground">
                   {r.scope === 'usual'
-                    ? 'Every week from now on'
+                    ? usual
+                      ? 'Every week from now on'
+                      : 'Approve it and they can be scheduled every week'
                     : `${fmtWeekLabel(r.week_start ?? '')} only`}
                   {`, asked ${fmtDateShort(r.created_at.slice(0, 10))}`}
                 </Text>

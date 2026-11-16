@@ -555,6 +555,36 @@ export async function notifyEmployee(params: {
   if (error) throw error;
 }
 
+/** People whose invite has been emailed (sent, or about to be). */
+export async function loadInvitedIds(cafeId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('reminders')
+    .select('employee_id')
+    .eq('cafe_id', cafeId)
+    .eq('kind', 'invite')
+    .in('state', ['queued', 'sent'])
+    .limit(500);
+  // A hint only: the team list must still load without it.
+  if (error) return new Set();
+  return new Set((data ?? []).map((r) => r.employee_id as string));
+}
+
+/** Asks someone who has joined to set their usual week. */
+export async function askForUsualWeek(params: {
+  cafeId: string;
+  employeeId: string;
+  channel: Channel;
+}): Promise<void> {
+  await notifyEmployee({
+    cafeId: params.cafeId,
+    employeeId: params.employeeId,
+    weekStart: currentWeekStart(),
+    weekday: 0,
+    body: 'Your manager asked when you can usually work. Open ShiftCup, then Availability, and set your usual week. Your shifts are planned from it every week.',
+    channel: params.channel,
+  });
+}
+
 /** Emails the invite again. False when there is no email address to send it to. */
 export async function resendInvite(employeeId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('resend_invite', {

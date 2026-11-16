@@ -7,6 +7,7 @@ import {
   loadBlocks,
   loadCoverRequests,
   loadEmployees,
+  loadInvitedIds,
   loadPendingAvailabilityRequests,
   loadPublished,
   loadReminders,
@@ -49,6 +50,8 @@ export type WeekData = {
   coverRequests: CoverRequest[];
   /** Availability changes the team has asked for and the manager has not decided yet. */
   changeRequests: AvailabilityRequest[];
+  /** People whose invite has been emailed. */
+  invitedIds: Set<string>;
   settings: CafeSettings | null;
   reminders: Reminder[];
   engine: EngineContext;
@@ -75,6 +78,7 @@ export function useWeekData(weekStart: string): WeekData {
   const [settings, setSettings] = useState<CafeSettings | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [changeRequests, setChangeRequests] = useState<AvailabilityRequest[]>([]);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!cafeId) {
@@ -83,18 +87,20 @@ export function useWeekData(weekStart: string): WeekData {
     }
     try {
       setError('');
-      const [emps, blks, avail, req, asg, pub, covers, cfg, rem, changes] = await Promise.all([
-        loadEmployees(cafeId),
-        loadBlocks(cafeId),
-        loadAvailability(cafeId, weekStart),
-        loadRequest(cafeId, weekStart),
-        loadAssignments(cafeId, weekStart),
-        loadPublished(cafeId, weekStart),
-        loadCoverRequests(cafeId),
-        loadSettings(cafeId),
-        loadReminders(cafeId, weekStart),
-        loadPendingAvailabilityRequests(cafeId),
-      ]);
+      const [emps, blks, avail, req, asg, pub, covers, cfg, rem, changes, invited] =
+        await Promise.all([
+          loadEmployees(cafeId),
+          loadBlocks(cafeId),
+          loadAvailability(cafeId, weekStart),
+          loadRequest(cafeId, weekStart),
+          loadAssignments(cafeId, weekStart),
+          loadPublished(cafeId, weekStart),
+          loadCoverRequests(cafeId),
+          loadSettings(cafeId),
+          loadReminders(cafeId, weekStart),
+          loadPendingAvailabilityRequests(cafeId),
+          loadInvitedIds(cafeId),
+        ]);
       setEmployees(emps);
       setBlocks(blks);
       setAvailability(avail);
@@ -106,6 +112,7 @@ export function useWeekData(weekStart: string): WeekData {
       setSettings(cfg);
       setReminders(rem);
       setChangeRequests(changes);
+      setInvitedIds(invited);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this week.');
     } finally {
@@ -252,6 +259,7 @@ export function useWeekData(weekStart: string): WeekData {
     published,
     coverRequests,
     changeRequests,
+    invitedIds,
     settings,
     reminders,
     engine,
