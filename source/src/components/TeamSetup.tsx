@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { Avatar, Btn, PressScale, Sheet, toast } from '@/components/kit';
+import { InviteOptions } from '@/components/InviteOptions';
 import { askForUsualWeek, resendInvite } from '@/lib/api';
 import { C } from '@/lib/colors';
-import { inviteMessage, shareInvite } from '@/lib/invite';
 import { cardShadow } from '@/lib/motion';
 import {
   STAGE_HINT,
@@ -135,6 +135,7 @@ export function SetupSheet({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [done, setDone] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const emailable = people.filter(
     (p) =>
@@ -143,7 +144,7 @@ export function SetupSheet({
         p.stage === 'needs_usual'),
   );
 
-  const act = async (p: SetupPerson, how: 'email' | 'share' | 'ask'): Promise<boolean> => {
+  const act = async (p: SetupPerson, how: 'email' | 'ask'): Promise<boolean> => {
     setError('');
     try {
       if (how === 'ask') {
@@ -153,13 +154,6 @@ export function SetupSheet({
         const ok = await resendInvite(p.emp.id);
         if (!ok) throw new Error(`${p.emp.name} has no email address. Share their invite instead.`);
         setDone((d) => ({ ...d, [p.emp.id]: 'Invite emailed' }));
-      } else {
-        const result = await shareInvite(inviteMessage(p.emp, cafeName || 'our café'));
-        if (result === 'failed') {
-          throw new Error(`Could not share. ${p.emp.name}'s invite code is ${p.emp.invite_code}.`);
-        }
-        if (result === 'copied') toast(`Invite for ${p.emp.name} copied. Paste it into a text.`);
-        setDone((d) => ({ ...d, [p.emp.id]: result === 'copied' ? 'Copied' : 'Shared' }));
       }
       return true;
     } catch (e) {
@@ -168,7 +162,7 @@ export function SetupSheet({
     }
   };
 
-  const one = async (p: SetupPerson, how: 'email' | 'share' | 'ask') => {
+  const one = async (p: SetupPerson, how: 'email' | 'ask') => {
     setBusyId(`${p.emp.id}:${how}`);
     await act(p, how);
     setBusyId(null);
@@ -212,80 +206,94 @@ export function SetupSheet({
             const hasEmail = Boolean(p.emp.email?.trim());
             const state = done[p.emp.id];
             return (
-              <View
-                key={p.emp.id}
-                className={`flex-row items-center gap-3 py-3 ${i > 0 ? 'border-t border-border/70' : ''}`}
-              >
-                <Avatar name={p.emp.name} size={38} />
-                <View className="flex-1">
-                  <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
-                    {p.emp.name}
-                  </Text>
-                  <Text className="text-xs leading-4 text-muted-foreground">
-                    {state
-                      ? `${state} just now`
-                      : p.stage === 'not_invited' && !hasEmail
-                        ? 'No email on file. Share the invite by text.'
-                        : STAGE_HINT[p.stage]}
-                  </Text>
-                </View>
-                {state ? (
-                  <View className="flex-row items-center gap-1 px-1">
-                    <Check size={15} color={C.soloInk} />
-                    <Text className="text-xs font-semibold" style={{ color: C.soloInk }}>
-                      Done
+              <View key={p.emp.id} className={i > 0 ? 'border-t border-border/70' : ''}>
+                <View className="flex-row items-center gap-3 py-3">
+                  <Avatar name={p.emp.name} size={38} />
+                  <View className="flex-1">
+                    <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
+                      {p.emp.name}
+                    </Text>
+                    <Text className="text-xs leading-4 text-muted-foreground">
+                      {state
+                        ? `${state} just now`
+                        : p.stage === 'not_invited' && !hasEmail
+                          ? 'No email on file. Send the invite by text or WhatsApp.'
+                          : STAGE_HINT[p.stage]}
                     </Text>
                   </View>
-                ) : p.stage === 'review' ? (
-                  <Btn
-                    label="Review"
-                    size="sm"
-                    full={false}
-                    variant="secondary"
-                    onPress={onReview}
-                  />
-                ) : joined ? (
-                  <Btn
-                    label="Ask"
-                    size="sm"
-                    full={false}
-                    loading={busyId === `${p.emp.id}:ask`}
-                    disabled={busyId !== null}
-                    onPress={() => one(p, 'ask')}
-                    icon={<MessageCircle size={14} color={C.cream} />}
-                  />
-                ) : (
-                  <View className="flex-row items-center gap-1.5">
-                    {hasEmail ? (
-                      <Btn
-                        label="Email"
-                        size="sm"
-                        full={false}
-                        loading={busyId === `${p.emp.id}:email`}
-                        disabled={busyId !== null}
-                        onPress={() => one(p, 'email')}
-                        icon={<Mail size={14} color={C.cream} />}
-                      />
-                    ) : null}
-                    <PressScale
-                      onPress={() => one(p, 'share')}
+                  {state ? (
+                    <View className="flex-row items-center gap-1 px-1">
+                      <Check size={15} color={C.soloInk} />
+                      <Text className="text-xs font-semibold" style={{ color: C.soloInk }}>
+                        Done
+                      </Text>
+                    </View>
+                  ) : p.stage === 'review' ? (
+                    <Btn
+                      label="Review"
+                      size="sm"
+                      full={false}
+                      variant="secondary"
+                      onPress={onReview}
+                    />
+                  ) : joined ? (
+                    <Btn
+                      label="Ask"
+                      size="sm"
+                      full={false}
+                      loading={busyId === `${p.emp.id}:ask`}
                       disabled={busyId !== null}
-                      accessibilityLabel={`Share ${p.emp.name}'s invite`}
-                      className={`flex-row items-center gap-1.5 rounded-xl px-3 py-2 ${
-                        hasEmail ? 'border border-border bg-card' : 'bg-primary'
-                      }`}
-                    >
-                      <Share2 size={14} color={hasEmail ? C.pine : C.cream} />
-                      <Text
-                        className={`text-xs font-semibold ${
-                          hasEmail ? 'text-foreground' : 'text-primary-foreground'
+                      onPress={() => one(p, 'ask')}
+                      icon={<MessageCircle size={14} color={C.cream} />}
+                    />
+                  ) : (
+                    <View className="flex-row items-center gap-1.5">
+                      {hasEmail ? (
+                        <Btn
+                          label="Email"
+                          size="sm"
+                          full={false}
+                          loading={busyId === `${p.emp.id}:email`}
+                          disabled={busyId !== null}
+                          onPress={() => one(p, 'email')}
+                          icon={<Mail size={14} color={C.cream} />}
+                        />
+                      ) : null}
+                      <PressScale
+                        onPress={() => setOpenId((id) => (id === p.emp.id ? null : p.emp.id))}
+                        disabled={busyId !== null}
+                        accessibilityLabel={`Share ${p.emp.name}'s invite`}
+                        className={`flex-row items-center gap-1.5 rounded-xl px-3 py-2 ${
+                          hasEmail ? 'border border-border bg-card' : 'bg-primary'
                         }`}
                       >
-                        Share
-                      </Text>
-                    </PressScale>
+                        <Share2 size={14} color={hasEmail ? C.pine : C.cream} />
+                        <Text
+                          className={`text-xs font-semibold ${
+                            hasEmail ? 'text-foreground' : 'text-primary-foreground'
+                          }`}
+                        >
+                          {openId === p.emp.id ? 'Close' : 'Send'}
+                        </Text>
+                      </PressScale>
+                    </View>
+                  )}
+                </View>
+                {openId === p.emp.id && !state ? (
+                  <View className="pb-3">
+                    <InviteOptions
+                      person={p.emp}
+                      cafeId={cafeId}
+                      cafeName={cafeName}
+                      compact
+                      onSent={async (how) => {
+                        setDone((d) => ({ ...d, [p.emp.id]: how }));
+                        setOpenId(null);
+                        await onChanged();
+                      }}
+                    />
                   </View>
-                )}
+                ) : null}
               </View>
             );
           })}

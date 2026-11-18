@@ -43,6 +43,8 @@ function RootLayoutNav() {
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(app)" />
       </Stack.Protected>
+      {/* Invite links must open for anyone, even on a phone where someone is signed in. */}
+      <Stack.Screen name="join" />
       <Stack.Screen name="legal" />
       <Stack.Screen name="reset-password" />
     </Stack>

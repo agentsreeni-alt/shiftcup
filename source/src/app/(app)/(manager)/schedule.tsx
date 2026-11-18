@@ -50,6 +50,7 @@ import {
   fmtWeekLabel,
   weekdayOf,
 } from '@/lib/dates';
+import { ShareTextButtons } from '@/components/InviteOptions';
 import { isReachable } from '@/lib/invite';
 import { checkEligibility, fillOpenSlots, weekMinutes } from '@/lib/scheduling';
 import {
@@ -1072,9 +1073,17 @@ export default function ScheduleScreen() {
       </Sheet>
 
       <Sheet visible={shareOpen} onClose={() => setShareOpen(false)} title="Share as text">
-        <Text selectable className="pb-6 text-sm leading-6 text-foreground">
-          {shareText}
-        </Text>
+        <View className="gap-3 pb-6">
+          <ShareTextButtons
+            message={shareText}
+            subject={`${cafe?.name ?? 'ShiftCup'}: schedule for ${fmtWeekLabel(weekStart)}`}
+          />
+          <View className="rounded-xl bg-muted/60 p-3">
+            <Text selectable className="text-sm leading-6 text-foreground">
+              {shareText}
+            </Text>
+          </View>
+        </View>
       </Sheet>
 
       <Sheet

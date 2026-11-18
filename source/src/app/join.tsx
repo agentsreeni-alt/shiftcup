@@ -5,6 +5,8 @@ import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/client/supabase';
+import { useSession } from '@/ctx';
+import { useApp } from '@/lib/app-context';
 import { BackButton, Btn } from '@/components/kit';
 import { looksLikeEmail } from '@/lib/auth-messages';
 import { C } from '@/lib/colors';
@@ -17,6 +19,9 @@ export default function JoinScreen() {
   const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const onKeyboardSubmit = useKeyboardSubmit(() => submit());
   const router = useRouter();
+  const { session } = useSession();
+  const { refresh } = useApp();
+  const [signingOut, setSigningOut] = useState(false);
   const params = useLocalSearchParams<{ code?: string }>();
   const [code, setCode] = useState(
     typeof params.code === 'string' ? params.code.trim().toUpperCase().slice(0, 16) : '',
@@ -43,24 +48,61 @@ export default function JoinScreen() {
       return;
     }
     setBusy(true);
-    const { data, error: fnError } = await supabase.functions.invoke('join-cafe', {
-      body: {
-        invite_code: code.trim().toUpperCase(),
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-      },
-    });
-    if (fnError) {
+    const cleanEmail = email.trim().toLowerCase();
+    const body = {
+      invite_code: code.trim().toUpperCase(),
+      name: name.trim(),
+      email: cleanEmail,
+      password,
+    };
+
+    const readError = async (fnError: unknown): Promise<{ message: string; status: number }> => {
       let message = 'Could not join. Check the invite code and try again.';
+      let status = 0;
       try {
-        const text = await fnError.context?.text();
+        const ctx = (fnError as { context?: Response }).context;
+        status = ctx?.status ?? 0;
+        const text = await ctx?.text();
         if (text) {
           const parsed = JSON.parse(text) as { message?: string };
           if (parsed.message) message = parsed.message;
         }
       } catch {
         // keep the friendly default
+      }
+      return { message, status };
+    };
+
+    const { data, error: fnError } = await supabase.functions.invoke('join-cafe', { body });
+    if (fnError) {
+      const { message, status } = await readError(fnError);
+      // They already have a ShiftCup account with this email: sign in with it and join.
+      if (status === 409 && message.toLowerCase().includes('already has an account')) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+        if (signInError) {
+          setBusy(false);
+          setError(
+            'That email already has a ShiftCup account. Enter its password to join with it, or use “Forgot password” on the sign-in page.',
+          );
+          return;
+        }
+        const linked = await supabase.functions.invoke('join-cafe', {
+          body: { invite_code: body.invite_code, link_existing: true },
+        });
+        if (linked.error) {
+          const again = await readError(linked.error);
+          await supabase.auth.signOut();
+          setBusy(false);
+          setError(again.message);
+          return;
+        }
+        await refresh();
+        setBusy(false);
+        router.replace('/(app)/home');
+        return;
       }
       setBusy(false);
       setError(message);
@@ -72,7 +114,7 @@ export default function JoinScreen() {
       return;
     }
     const { error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       password,
     });
     setBusy(false);
@@ -82,6 +124,40 @@ export default function JoinScreen() {
     }
     router.replace('/(app)/home');
   };
+
+  // Someone is signed in on this phone (often the manager testing the link). Joining
+  // makes a separate account, so sign out first; the code stays filled in.
+  if (session) {
+    return (
+      <SafeAreaView className="flex-1 bg-background">
+        <View style={{ flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center' }}>
+          <View className="flex-1 justify-center gap-5 px-6">
+            <Text className="text-3xl font-bold text-foreground">Join your café</Text>
+            <Text className="text-base leading-6 text-muted-foreground">
+              This device is signed in as {session.user.email}. To join with invite code{' '}
+              <Text className="font-bold text-foreground">{code || 'from your manager'}</Text>, sign
+              out first. You can sign back in any time.
+            </Text>
+            <Btn
+              label="Sign out and join"
+              size="lg"
+              loading={signingOut}
+              onPress={async () => {
+                setSigningOut(true);
+                await supabase.auth.signOut();
+                setSigningOut(false);
+              }}
+            />
+            <Btn
+              label="Stay signed in"
+              variant="ghost"
+              onPress={() => router.replace('/(app)/home')}
+            />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background">

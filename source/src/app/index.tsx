@@ -72,7 +72,7 @@ export default function WelcomeScreen() {
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => router.push('/(auth)/join')}
+              onPress={() => router.push('/join')}
               accessibilityRole="button"
               className="mx-auto mb-2 flex-row items-center rounded-full border border-border px-4 py-2 active:opacity-60"
             >

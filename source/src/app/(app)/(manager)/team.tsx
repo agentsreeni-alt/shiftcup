@@ -46,7 +46,8 @@ import {
   updateEmployee,
 } from '@/lib/api';
 import { useApp } from '@/lib/app-context';
-import { inviteMessage, isReachable, shareInvite } from '@/lib/invite';
+import { isReachable } from '@/lib/invite';
+import { InviteSheet } from '@/components/InviteOptions';
 import { C } from '@/lib/colors';
 import { cardShadow } from '@/lib/motion';
 import { DAY_LONG, DAY_SHORT, fmtRange, fmtTime, fmtWeekLabel } from '@/lib/dates';
@@ -191,16 +192,8 @@ export default function TeamScreen() {
     }
   };
 
-  const invite = async (emp: Employee) => {
-    const result = await shareInvite(inviteMessage(emp, cafeName || cafe?.name || 'our café'));
-    setMessage(
-      result === 'copied'
-        ? `Invite for ${emp.name} copied. Paste it into a text or email.`
-        : result === 'failed'
-          ? `Could not share. ${emp.name}'s invite code is ${emp.invite_code}.`
-          : '',
-    );
-  };
+  const [inviteFor, setInviteFor] = useState<Employee | null>(null);
+  const invite = (emp: Employee) => setInviteFor(emp);
 
   const runParse = async () => {
     if (!cafe || !paste.trim()) return;
@@ -898,6 +891,16 @@ export default function TeamScreen() {
         />
       ) : null}
 
+      {cafe ? (
+        <InviteSheet
+          person={inviteFor}
+          cafeId={cafe.id}
+          cafeName={cafeName || cafe.name}
+          onClose={() => setInviteFor(null)}
+          onSent={() => void data.reload()}
+        />
+      ) : null}
+
       <MemberSheet
         open={memberSheet.open}
         editing={memberSheet.editing}
@@ -910,9 +913,9 @@ export default function TeamScreen() {
           if (emp.email?.trim()) {
             toast(`Invite emailed to ${emp.name}. They join with code ${emp.invite_code}.`);
           } else {
-            // No email to send it to: open the share sheet so it can go by text instead.
-            // Waits for the sheet to finish closing, or iOS will not show the share sheet.
-            setTimeout(() => void invite(emp), 450);
+            // No email to send it to: show the ways to send it (text, WhatsApp, copy...).
+            // Waits for the sheet to finish closing, or iOS will not show the next one.
+            setTimeout(() => setInviteFor(emp), 450);
           }
         }}
       />
