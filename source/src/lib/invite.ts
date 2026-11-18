@@ -35,60 +35,106 @@ function smsUrl(phone: string | null | undefined, body: string): string {
   return `sms:${to}${sep}body=${encodeURIComponent(body)}`;
 }
 
+/** True when the system share sheet is available (all phones; some computer browsers). */
+export function canSystemShare(): boolean {
+  if (Platform.OS !== 'web') return true;
+  return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+}
+
+/** Phones and tablets in a browser: they have Messages and WhatsApp to hand off to. */
+function isMobileWeb(): boolean {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+}
+
+export type ShareResult =
+  /** Another app was asked to open with the message (we cannot see if they sent it). */
+  | 'handed_off'
+  /** The system share sheet finished: the person picked an app. */
+  | 'shared'
+  /** The share sheet was closed without picking anything. */
+  | 'cancelled'
+  | 'copied'
+  | 'failed';
+
+function urlFor(
+  way: 'text' | 'whatsapp' | 'email',
+  message: string,
+  opts: { subject?: string; email?: string | null; phone?: string | null },
+): string {
+  if (way === 'text') return smsUrl(opts.phone, message);
+  if (way === 'whatsapp') {
+    // The app on phones, WhatsApp Web on computers.
+    return Platform.OS === 'web' && !isMobileWeb()
+      ? `https://web.whatsapp.com/send?text=${encodeURIComponent(message)}`
+      : `whatsapp://send?text=${encodeURIComponent(message)}`;
+  }
+  return `mailto:${encodeURIComponent(opts.email?.trim() ?? '')}?subject=${encodeURIComponent(
+    opts.subject ?? 'ShiftCup',
+  )}&body=${encodeURIComponent(message)}`;
+}
+
 /**
- * Sends a message one way. Text, WhatsApp and email open that app with the message
- * written, which works everywhere, including over an open sheet. "more" is the system
- * share sheet, which phones cannot show on top of another sheet, so callers close their
- * sheet first. If nothing can open, the message is copied instead.
+ * Sends a message one way. Must be called straight from the tap (no waiting first): browsers
+ * only let a tap open another app or the share sheet.
+ *
+ * - text / email / whatsapp: hands the written message to that app.
+ * - more: the system share sheet (phones), so any app can be picked.
+ * - copy: the clipboard.
  */
 export async function shareTextVia(
   way: InviteWay,
   message: string,
   opts: { subject?: string; email?: string | null; phone?: string | null } = {},
-): Promise<'opened' | 'copied' | 'failed'> {
-  try {
-    if (way === 'copy') {
-      await Clipboard.setStringAsync(message);
-      return 'copied';
-    }
-    if (way === 'more') {
-      const nav = typeof navigator !== 'undefined' ? navigator : undefined;
-      if (Platform.OS === 'web') {
-        if (!nav?.share) {
-          await Clipboard.setStringAsync(message);
-          return 'copied';
-        }
-        try {
-          await nav.share({ text: message });
-        } catch (e) {
-          if (!(e instanceof Error && e.name === 'AbortError')) throw e;
-        }
-        return 'opened';
-      }
-      await Share.share({ message });
-      return 'opened';
-    }
-    const url =
-      way === 'text'
-        ? smsUrl(opts.phone, message)
-        : way === 'whatsapp'
-          ? `https://wa.me/?text=${encodeURIComponent(message)}`
-          : `mailto:${encodeURIComponent(opts.email?.trim() ?? '')}?subject=${encodeURIComponent(
-              opts.subject ?? 'ShiftCup',
-            )}&body=${encodeURIComponent(message)}`;
-    if (Platform.OS === 'web' && way === 'whatsapp') {
-      window.open(url, '_blank', 'noopener');
-      return 'opened';
-    }
-    await Linking.openURL(url);
-    return 'opened';
-  } catch {
+): Promise<ShareResult> {
+  if (way === 'copy') {
     try {
       await Clipboard.setStringAsync(message);
       return 'copied';
     } catch {
       return 'failed';
     }
+  }
+
+  if (way === 'more') {
+    if (Platform.OS === 'web') {
+      if (!canSystemShare()) return 'failed';
+      try {
+        await navigator.share({ text: message });
+        return 'shared';
+      } catch (e) {
+        return e instanceof Error && e.name === 'AbortError' ? 'cancelled' : 'failed';
+      }
+    }
+    try {
+      const r = await Share.share({ message });
+      return r.action === Share.dismissedAction ? 'cancelled' : 'shared';
+    } catch {
+      return 'failed';
+    }
+  }
+
+  const url = urlFor(way, message, opts);
+  if (Platform.OS === 'web') {
+    // A link to Messages or Mail must replace the page's address, not open a new tab:
+    // browsers silently drop app links opened in new tabs, which is why nothing happened.
+    if (way === 'whatsapp' && !isMobileWeb()) {
+      const w = window.open(url, '_blank');
+      return w ? 'handed_off' : 'failed';
+    }
+    window.location.href = url;
+    return 'handed_off';
+  }
+  try {
+    if (way === 'whatsapp' && !(await Linking.canOpenURL(url))) {
+      // No WhatsApp on this phone: the web link opens it, or offers to install it.
+      await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(message)}`);
+      return 'handed_off';
+    }
+    await Linking.openURL(url);
+    return 'handed_off';
+  } catch {
+    return 'failed';
   }
 }
 
@@ -97,7 +143,7 @@ export function sendInviteVia(
   way: InviteWay,
   emp: Pick<Employee, 'name' | 'invite_code' | 'email' | 'phone'>,
   cafeName: string,
-): Promise<'opened' | 'copied' | 'failed'> {
+): Promise<ShareResult> {
   return shareTextVia(way, inviteMessage(emp, cafeName), {
     subject: `Join ${cafeName} on ShiftCup`,
     email: emp.email,

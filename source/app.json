@@ -10,7 +10,14 @@
     "ios": {
       "supportsTablet": true,
       "buildNumber": "1",
-      "bundleIdentifier": "com.miaoda.appfqyfoi25l69t"
+      "bundleIdentifier": "com.miaoda.appfqyfoi25l69t",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "sms",
+          "mailto"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

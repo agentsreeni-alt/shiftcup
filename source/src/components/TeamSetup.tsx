@@ -1,6 +1,6 @@
 import { Check, ChevronRight, Mail, MessageCircle, Share2 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 
 import { Avatar, Btn, PressScale, Sheet, toast } from '@/components/kit';
 import { InviteOptions } from '@/components/InviteOptions';
@@ -215,13 +215,15 @@ export function SetupSheet({
                     </Text>
                     <Text className="text-xs leading-4 text-muted-foreground">
                       {state
-                        ? `${state} just now`
+                        ? state
                         : p.stage === 'not_invited' && !hasEmail
                           ? 'No email on file. Send the invite by text or WhatsApp.'
                           : STAGE_HINT[p.stage]}
                     </Text>
                   </View>
-                  {state ? (
+                  {/* Only what ShiftCup itself sent counts as done. A hand-off to Messages or
+                      WhatsApp keeps the Send button, in case nothing went out. */}
+                  {state && (joined || state === 'Invite emailed') ? (
                     <View className="flex-row items-center gap-1 px-1">
                       <Check size={15} color={C.soloInk} />
                       <Text className="text-xs font-semibold" style={{ color: C.soloInk }}>
@@ -279,16 +281,17 @@ export function SetupSheet({
                     </View>
                   )}
                 </View>
-                {openId === p.emp.id && !state ? (
+                {openId === p.emp.id ? (
                   <View className="pb-3">
                     <InviteOptions
                       person={p.emp}
                       cafeId={cafeId}
                       cafeName={cafeName}
-                      compact
+                      showShareSheet={Platform.OS === 'web'}
                       onSent={async (how) => {
+                        // Options stay open: the line under them says what happened, and
+                        // another way is one tap away if the app did not open.
                         setDone((d) => ({ ...d, [p.emp.id]: how }));
-                        setOpenId(null);
                         await onChanged();
                       }}
                     />

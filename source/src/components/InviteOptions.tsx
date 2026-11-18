@@ -6,9 +6,12 @@ import { Btn, PressScale, Sheet, toast } from '@/components/kit';
 import { resendInvite } from '@/lib/api';
 import { C } from '@/lib/colors';
 import {
+  canSystemShare,
   inviteLink,
+  inviteMessage,
   type InviteWay,
   recordInviteShared,
+  type ShareResult,
   sendInviteVia,
   shareTextVia,
 } from '@/lib/invite';
@@ -16,69 +19,113 @@ import type { Employee } from '@/lib/types';
 
 type Person = Pick<Employee, 'id' | 'name' | 'invite_code' | 'email' | 'phone'>;
 
+const APP_NAME: Record<InviteWay, string> = {
+  text: 'Messages',
+  whatsapp: 'WhatsApp',
+  email: 'Your email app',
+  copy: 'Copy',
+  more: 'Share',
+};
+
+/** Computers without Messages (Windows, Linux) cannot open text-message links. */
+function textWorksHere(): boolean {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return true;
+  return /iPhone|iPad|iPod|Android|Mac/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+}
+
 const WAYS: { way: InviteWay; label: string; icon: (c: string) => React.ReactNode }[] = [
   { way: 'text', label: 'Text', icon: (c) => <MessageSquareText size={18} color={c} /> },
   { way: 'whatsapp', label: 'WhatsApp', icon: (c) => <MessageCircle size={18} color={c} /> },
-  { way: 'email', label: 'Email app', icon: (c) => <Mail size={18} color={c} /> },
+  { way: 'email', label: 'Email', icon: (c) => <Mail size={18} color={c} /> },
   { way: 'copy', label: 'Copy', icon: (c) => <Copy size={18} color={c} /> },
 ];
 
+/** What to tell the manager after a tap. Never says "sent": the app cannot know that. */
+function describe(
+  way: InviteWay,
+  result: ShareResult,
+  name: string,
+): { text: string; ok: boolean } {
+  switch (result) {
+    case 'handed_off':
+      return {
+        text: `${APP_NAME[way]} should open with ${name}'s invite. Send it from there. Nothing opened? Use Copy.`,
+        ok: true,
+      };
+    case 'shared':
+      return { text: `${name}'s invite was shared.`, ok: true };
+    case 'copied':
+      return { text: `Copied. Paste it into a message to ${name}.`, ok: true };
+    case 'cancelled':
+      return { text: '', ok: false };
+    default:
+      return {
+        text:
+          way === 'more'
+            ? 'This browser cannot share. Use Copy, then paste the invite into a message.'
+            : `${APP_NAME[way]} could not open on this device. Use Copy, then paste the invite into a message.`,
+        ok: false,
+      };
+  }
+}
+
 /**
- * Every way to get an invite to someone, as plain buttons. Text, WhatsApp and email open
- * that app with the message already written; Copy puts it on the clipboard. These work on
- * phones and computers, and over an open sheet, unlike the system share sheet.
+ * Every way to get an invite to someone. Each button does its work straight from the tap,
+ * which browsers require, and the line underneath says what really happened.
  */
 export function InviteOptions({
   person,
   cafeId,
   cafeName,
   onSent,
-  onMore,
-  compact,
+  showShareSheet,
 }: {
   person: Person;
   cafeId: string;
   cafeName: string;
-  /** Called after any way is used, so the screen can refresh who is invited. */
-  onSent?: (how: string) => void;
-  /** Shows "More…" (the system share sheet). The caller closes its sheet first. */
-  onMore?: () => void;
-  compact?: boolean;
+  /** Called after the invite went somewhere, so the screen can show them as invited. */
+  onSent?: (status: string) => void;
+  /** Offer the system share sheet (not over another sheet on phones). */
+  showShareSheet?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
   const hasEmail = Boolean(person.email?.trim());
+  const ways = WAYS.filter((w) => w.way !== 'text' || textWorksHere());
+  const share = showShareSheet && canSystemShare();
 
-  const send = async (way: InviteWay) => {
+  // Not async up front: the browser only allows opening apps during the tap itself.
+  const send = (way: InviteWay) => {
     setBusy(way);
-    const result = await sendInviteVia(way, person, cafeName);
-    setBusy(null);
-    if (result === 'failed') {
-      toast(`Could not open that. ${person.name}'s invite code is ${person.invite_code}.`, 'error');
-      return;
-    }
-    if (result === 'copied') {
-      toast(
-        way === 'copy'
-          ? `Invite for ${person.name} copied. Paste it into any message.`
-          : `Could not open that app, so the invite was copied. Paste it into a message.`,
-      );
-    }
-    await recordInviteShared(cafeId, person.id, way).catch(() => {});
-    onSent?.(way === 'copy' ? 'Copied' : 'Shared');
+    void sendInviteVia(way, person, cafeName).then(async (result) => {
+      setBusy(null);
+      const said = describe(way, result, person.name);
+      setStatus(said.text ? said : null);
+      if (result === 'handed_off' || result === 'shared' || result === 'copied') {
+        await recordInviteShared(cafeId, person.id, way).catch(() => {});
+        onSent?.(
+          result === 'copied'
+            ? 'Invite copied'
+            : result === 'shared'
+              ? 'Invite shared'
+              : `Opened in ${APP_NAME[way]}`,
+        );
+      }
+    });
   };
 
   const emailForMe = async () => {
     setBusy('auto');
     try {
       const ok = await resendInvite(person.id);
-      if (ok) {
-        toast(`Invite emailed to ${person.email}.`);
-        onSent?.('Emailed');
-      } else {
-        toast('Add their email in Edit first.', 'error');
-      }
+      setStatus(
+        ok
+          ? { text: `Emailed to ${person.email}. It arrives in a minute or two.`, ok: true }
+          : { text: 'Add their email in Edit first.', ok: false },
+      );
+      if (ok) onSent?.('Invite emailed');
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not send the invite.', 'error');
+      setStatus({ text: e instanceof Error ? e.message : 'Could not send the invite.', ok: false });
     } finally {
       setBusy(null);
     }
@@ -89,15 +136,24 @@ export function InviteOptions({
       {hasEmail ? (
         <Btn
           label={`Email it for me to ${person.email}`}
-          size={compact ? 'sm' : 'md'}
           loading={busy === 'auto'}
           disabled={busy !== null && busy !== 'auto'}
           onPress={emailForMe}
           icon={<Send size={15} color={C.cream} />}
         />
       ) : null}
+      {share ? (
+        <Btn
+          label="Share invite…"
+          variant={hasEmail ? 'secondary' : 'primary'}
+          loading={busy === 'more'}
+          disabled={busy !== null && busy !== 'more'}
+          onPress={() => send('more')}
+          icon={<Share2 size={15} color={hasEmail ? C.pine : C.cream} />}
+        />
+      ) : null}
       <View className="flex-row gap-1.5">
-        {WAYS.map((w) => (
+        {ways.map((w) => (
           <PressScale
             key={w.way}
             onPress={() => send(w.way)}
@@ -111,24 +167,21 @@ export function InviteOptions({
             <Text className="text-[11px] font-semibold text-foreground">{w.label}</Text>
           </PressScale>
         ))}
-        {onMore ? (
-          <PressScale
-            onPress={onMore}
-            disabled={busy !== null}
-            accessibilityRole="button"
-            accessibilityLabel={`More ways to send ${person.name}'s invite`}
-            className="flex-1 items-center gap-1 rounded-xl border border-border bg-card py-2.5"
-          >
-            <Share2 size={18} color={C.pine} />
-            <Text className="text-[11px] font-semibold text-foreground">More</Text>
-          </PressScale>
-        ) : null}
       </View>
+      {status ? (
+        <Text
+          className="px-1 text-xs leading-4"
+          style={{ color: status.ok ? C.soloInk : C.red }}
+          accessibilityLiveRegion="polite"
+        >
+          {status.text}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-/** One person's invite: the code, the link, and every way to send it. */
+/** One person's invite: the code, the link, the message, and every way to send it. */
 export function InviteSheet({
   person,
   cafeId,
@@ -142,25 +195,6 @@ export function InviteSheet({
   onClose: () => void;
   onSent?: () => void;
 }) {
-  const more = () => {
-    if (!person) return;
-    const p = person;
-    // Phones cannot show the system share sheet over this one: close, then open it.
-    onClose();
-    setTimeout(
-      () => {
-        void sendInviteVia('more', p, cafeName).then(async (r) => {
-          if (r === 'copied') toast(`Invite for ${p.name} copied. Paste it into any message.`);
-          if (r !== 'failed') {
-            await recordInviteShared(cafeId, p.id, 'more').catch(() => {});
-            onSent?.();
-          }
-        });
-      },
-      Platform.OS === 'web' ? 0 : 550,
-    );
-  };
-
   return (
     <Sheet visible={Boolean(person)} onClose={onClose} title={`Invite ${person?.name ?? ''}`}>
       {person ? (
@@ -180,17 +214,23 @@ export function InviteSheet({
               {inviteLink(person.invite_code)}
             </Text>
           </View>
-          <Text className="text-sm leading-5 text-muted-foreground">
-            {person.name} opens the link (or the ShiftCup app, then “Join with your invite code”),
-            makes a password, and is on your team. Then they send when they can usually work.
-          </Text>
           <InviteOptions
             person={person}
             cafeId={cafeId}
             cafeName={cafeName}
-            onMore={more}
+            // On the web the share sheet works over this one. Phones get it from the
+            // buttons' apps instead, since iOS will not stack sheets reliably.
+            showShareSheet={Platform.OS === 'web'}
             onSent={() => onSent?.()}
           />
+          <View className="rounded-xl border border-border p-3">
+            <Text className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+              The message
+            </Text>
+            <Text selectable className="text-sm leading-5 text-foreground">
+              {inviteMessage(person, cafeName)}
+            </Text>
+          </View>
         </View>
       ) : null}
     </Sheet>
@@ -199,36 +239,39 @@ export function InviteSheet({
 
 /** Text, WhatsApp, email or copy for any message, such as the week's schedule. */
 export function ShareTextButtons({ message, subject }: { message: string; subject: string }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const send = async (way: InviteWay) => {
-    setBusy(way);
-    const r = await shareTextVia(way, message, { subject });
-    setBusy(null);
-    if (r === 'copied') {
-      toast(
-        way === 'copy'
-          ? 'Copied. Paste it into any message.'
-          : 'Could not open that app, so it was copied.',
+  const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
+  const ways = WAYS.filter((w) => w.way !== 'text' || textWorksHere());
+  const send = (way: InviteWay) => {
+    void shareTextVia(way, message, { subject }).then((r) => {
+      const said = describe(way, r, 'your team');
+      setStatus(
+        said.text
+          ? { ...said, text: said.text.replace("your team's invite", 'the schedule') }
+          : null,
       );
-    } else if (r === 'failed') {
-      toast('Could not share that. Select the text and copy it.', 'error');
-    }
+    });
   };
   return (
-    <View className="flex-row gap-1.5">
-      {WAYS.map((w) => (
-        <PressScale
-          key={w.way}
-          onPress={() => send(w.way)}
-          disabled={busy !== null}
-          accessibilityRole="button"
-          accessibilityLabel={`${w.label}: share the schedule`}
-          className="flex-1 items-center gap-1 rounded-xl border border-border bg-card py-2.5"
-        >
-          {w.icon(C.pine)}
-          <Text className="text-[11px] font-semibold text-foreground">{w.label}</Text>
-        </PressScale>
-      ))}
+    <View className="gap-2">
+      <View className="flex-row gap-1.5">
+        {ways.map((w) => (
+          <PressScale
+            key={w.way}
+            onPress={() => send(w.way)}
+            accessibilityRole="button"
+            accessibilityLabel={`${w.label}: share the schedule`}
+            className="flex-1 items-center gap-1 rounded-xl border border-border bg-card py-2.5"
+          >
+            {w.icon(C.pine)}
+            <Text className="text-[11px] font-semibold text-foreground">{w.label}</Text>
+          </PressScale>
+        ))}
+      </View>
+      {status ? (
+        <Text className="px-1 text-xs leading-4" style={{ color: status.ok ? C.soloInk : C.red }}>
+          {status.text}
+        </Text>
+      ) : null}
     </View>
   );
 }
