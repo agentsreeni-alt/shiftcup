@@ -1,5 +1,5 @@
 import { Check, ChevronRight, Mail, MessageCircle, Share2 } from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 
 import { Avatar, Btn, PressScale, Sheet, toast } from '@/components/kit';
@@ -137,6 +137,19 @@ export function SetupSheet({
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
 
+  // Keep everyone where they were while the list is open. Otherwise sending someone their
+  // invite moves them down to "Invited", away from the buttons just tapped.
+  const order = useRef<string[]>([]);
+  if (!visible) order.current = [];
+  else if (order.current.length === 0) order.current = people.map((p) => p.emp.id);
+  const rows = useMemo(() => {
+    const at = (id: string) => {
+      const i = order.current.indexOf(id);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...people].sort((a, b) => at(a.emp.id) - at(b.emp.id));
+  }, [people, visible]);
+
   const emailable = people.filter(
     (p) =>
       !done[p.emp.id] &&
@@ -201,7 +214,7 @@ export function SetupSheet({
         ) : null}
 
         <View>
-          {people.map((p, i) => {
+          {rows.map((p, i) => {
             const joined = Boolean(p.emp.user_id);
             const hasEmail = Boolean(p.emp.email?.trim());
             const state = done[p.emp.id];

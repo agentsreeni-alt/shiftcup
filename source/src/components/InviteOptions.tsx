@@ -14,6 +14,7 @@ import {
   type ShareResult,
   sendInviteVia,
   shareTextVia,
+  webLinkFor,
 } from '@/lib/invite';
 import type { Employee } from '@/lib/types';
 
@@ -39,6 +40,64 @@ const WAYS: { way: InviteWay; label: string; icon: (c: string) => React.ReactNod
   { way: 'email', label: 'Email', icon: (c) => <Mail size={18} color={c} /> },
   { way: 'copy', label: 'Copy', icon: (c) => <Copy size={18} color={c} /> },
 ];
+
+/**
+ * One way to send. On the website Text, WhatsApp and Email are real links: the browser
+ * opens the app itself, which phones allow when a script asking them to would be ignored.
+ */
+function WayButton({
+  way,
+  label,
+  icon,
+  href,
+  newTab,
+  onPress,
+  dim,
+  a11y,
+}: {
+  way: InviteWay;
+  label: string;
+  icon: React.ReactNode;
+  href?: string;
+  newTab?: boolean;
+  onPress: () => void;
+  dim?: boolean;
+  a11y: string;
+}) {
+  const link = href
+    ? ({
+        href,
+        hrefAttrs: newTab ? { target: '_blank', rel: 'noopener' } : undefined,
+      } as object)
+    : {};
+  return (
+    <PressScale
+      {...link}
+      onPress={onPress}
+      accessibilityRole={href ? 'link' : 'button'}
+      accessibilityLabel={a11y}
+      className="flex-1 items-center gap-1 rounded-xl border border-border bg-card py-2.5"
+      style={{ opacity: dim ? 0.5 : 1 }}
+    >
+      {icon}
+      <Text className="text-[11px] font-semibold text-foreground">{label}</Text>
+    </PressScale>
+  );
+}
+
+/** Shown when nothing else worked: the message itself, to select and copy by hand. */
+function MessageToCopy({ message }: { message: string }) {
+  return (
+    <View className="rounded-xl border border-border bg-muted/50 p-3">
+      <Text className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+        Press and hold to copy
+      </Text>
+      <Text selectable className="text-sm leading-5 text-foreground">
+        {message}
+      </Text>
+    </View>
+  );
+}
 
 /** What to tell the manager after a tap. Never says "sent": the app cannot know that. */
 function describe(
@@ -95,22 +154,40 @@ export function InviteOptions({
   const share = showShareSheet && canSystemShare();
 
   // Not async up front: the browser only allows opening apps during the tap itself.
+  const message = inviteMessage(person, cafeName);
+  const linkOpts = {
+    subject: `Join ${cafeName} on ShiftCup`,
+    email: person.email,
+    phone: person.phone,
+  };
+  const [failed, setFailed] = useState(false);
+
+  const after = async (way: InviteWay, result: ShareResult) => {
+    setBusy(null);
+    const said = describe(way, result, person.name);
+    setStatus(said.text ? said : null);
+    setFailed(result === 'failed');
+    if (result === 'handed_off' || result === 'shared' || result === 'copied') {
+      await recordInviteShared(cafeId, person.id, way).catch(() => {});
+      onSent?.(
+        result === 'copied'
+          ? 'Invite copied'
+          : result === 'shared'
+            ? 'Invite shared'
+            : `Opened in ${APP_NAME[way]}`,
+      );
+    }
+  };
+
   const send = (way: InviteWay) => {
+    // A web link opens the app by itself; this only notes it.
+    if (webLinkFor(way, message, linkOpts)) {
+      void after(way, 'handed_off');
+      return;
+    }
     setBusy(way);
     void sendInviteVia(way, person, cafeName).then(async (result) => {
-      setBusy(null);
-      const said = describe(way, result, person.name);
-      setStatus(said.text ? said : null);
-      if (result === 'handed_off' || result === 'shared' || result === 'copied') {
-        await recordInviteShared(cafeId, person.id, way).catch(() => {});
-        onSent?.(
-          result === 'copied'
-            ? 'Invite copied'
-            : result === 'shared'
-              ? 'Invite shared'
-              : `Opened in ${APP_NAME[way]}`,
-        );
-      }
+      await after(way, result);
     });
   };
 
@@ -153,20 +230,22 @@ export function InviteOptions({
         />
       ) : null}
       <View className="flex-row gap-1.5">
-        {ways.map((w) => (
-          <PressScale
-            key={w.way}
-            onPress={() => send(w.way)}
-            disabled={busy !== null}
-            accessibilityRole="button"
-            accessibilityLabel={`${w.label}: send ${person.name}'s invite`}
-            className="flex-1 items-center gap-1 rounded-xl border border-border bg-card py-2.5"
-            style={{ opacity: busy && busy !== w.way ? 0.5 : 1 }}
-          >
-            {w.icon(C.pine)}
-            <Text className="text-[11px] font-semibold text-foreground">{w.label}</Text>
-          </PressScale>
-        ))}
+        {ways.map((w) => {
+          const link = webLinkFor(w.way, message, linkOpts);
+          return (
+            <WayButton
+              key={w.way}
+              way={w.way}
+              label={w.label}
+              icon={w.icon(C.pine)}
+              href={link?.href}
+              newTab={link?.newTab}
+              onPress={() => send(w.way)}
+              dim={Boolean(busy && busy !== w.way)}
+              a11y={`${w.label}: send ${person.name}'s invite`}
+            />
+          );
+        })}
       </View>
       {status ? (
         <Text
@@ -177,6 +256,7 @@ export function InviteOptions({
           {status.text}
         </Text>
       ) : null}
+      {failed ? <MessageToCopy message={message} /> : null}
     </View>
   );
 }
@@ -241,37 +321,43 @@ export function InviteSheet({
 export function ShareTextButtons({ message, subject }: { message: string; subject: string }) {
   const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
   const ways = WAYS.filter((w) => w.way !== 'text' || textWorksHere());
+  const [failed, setFailed] = useState(false);
+  const show = (way: InviteWay, r: ShareResult) => {
+    setFailed(r === 'failed');
+    const said = describe(way, r, 'your team');
+    setStatus(
+      said.text ? { ...said, text: said.text.replace("your team's invite", 'the schedule') } : null,
+    );
+  };
   const send = (way: InviteWay) => {
-    void shareTextVia(way, message, { subject }).then((r) => {
-      const said = describe(way, r, 'your team');
-      setStatus(
-        said.text
-          ? { ...said, text: said.text.replace("your team's invite", 'the schedule') }
-          : null,
-      );
-    });
+    if (webLinkFor(way, message, { subject })) return show(way, 'handed_off');
+    void shareTextVia(way, message, { subject }).then((r) => show(way, r));
   };
   return (
     <View className="gap-2">
       <View className="flex-row gap-1.5">
-        {ways.map((w) => (
-          <PressScale
-            key={w.way}
-            onPress={() => send(w.way)}
-            accessibilityRole="button"
-            accessibilityLabel={`${w.label}: share the schedule`}
-            className="flex-1 items-center gap-1 rounded-xl border border-border bg-card py-2.5"
-          >
-            {w.icon(C.pine)}
-            <Text className="text-[11px] font-semibold text-foreground">{w.label}</Text>
-          </PressScale>
-        ))}
+        {ways.map((w) => {
+          const link = webLinkFor(w.way, message, { subject });
+          return (
+            <WayButton
+              key={w.way}
+              way={w.way}
+              label={w.label}
+              icon={w.icon(C.pine)}
+              href={link?.href}
+              newTab={link?.newTab}
+              onPress={() => send(w.way)}
+              a11y={`${w.label}: share the schedule`}
+            />
+          );
+        })}
       </View>
       {status ? (
         <Text className="px-1 text-xs leading-4" style={{ color: status.ok ? C.soloInk : C.red }}>
           {status.text}
         </Text>
       ) : null}
+      {failed ? <MessageToCopy message={message} /> : null}
     </View>
   );
 }

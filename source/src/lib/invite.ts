@@ -30,8 +30,9 @@ export type InviteWay = 'text' | 'whatsapp' | 'email' | 'copy' | 'more';
 
 function smsUrl(phone: string | null | undefined, body: string): string {
   const to = (phone ?? '').replace(/[^\d+]/g, '');
-  // iOS reads the body after "&", Android after "?".
-  const sep = Platform.OS === 'ios' ? '&' : '?';
+  // iOS reads the body after "&", Android after "?". A website cannot tell which phone
+  // it is on reliably, and "?&" works on both.
+  const sep = Platform.OS === 'ios' ? '&' : Platform.OS === 'web' ? '?&' : '?';
   return `sms:${to}${sep}body=${encodeURIComponent(body)}`;
 }
 
@@ -47,6 +48,35 @@ function isMobileWeb(): boolean {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
 }
 
+/**
+ * Copies during the tap itself, which every browser allows (iPhone included). The
+ * newer clipboard API is the fallback, since some browsers refuse it.
+ */
+function copyNow(text: string): boolean {
+  if (typeof document === 'undefined') return false;
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.top = '0';
+  area.style.opacity = '0';
+  area.style.fontSize = '16px'; // stops iPhone zooming in
+  document.body.appendChild(area);
+  const active = document.activeElement as HTMLElement | null;
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(area);
+  active?.focus?.();
+  return ok;
+}
+
 export type ShareResult =
   /** Another app was asked to open with the message (we cannot see if they sent it). */
   | 'handed_off'
@@ -56,6 +86,21 @@ export type ShareResult =
   | 'cancelled'
   | 'copied'
   | 'failed';
+
+/**
+ * On the website, Text, WhatsApp and Email are real links the browser follows itself.
+ * Phones (iPhone above all, and home-screen web apps) ignore app links a script opens,
+ * but always follow a link that was tapped.
+ */
+export function webLinkFor(
+  way: InviteWay,
+  message: string,
+  opts: { subject?: string; email?: string | null; phone?: string | null } = {},
+): { href: string; newTab: boolean } | null {
+  if (Platform.OS !== 'web' || way === 'copy' || way === 'more') return null;
+  const href = urlFor(way, message, opts);
+  return { href, newTab: href.startsWith('http') };
+}
 
 function urlFor(
   way: 'text' | 'whatsapp' | 'email',
@@ -88,6 +133,7 @@ export async function shareTextVia(
   opts: { subject?: string; email?: string | null; phone?: string | null } = {},
 ): Promise<ShareResult> {
   if (way === 'copy') {
+    if (Platform.OS === 'web' && copyNow(message)) return 'copied';
     try {
       await Clipboard.setStringAsync(message);
       return 'copied';
